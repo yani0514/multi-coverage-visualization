@@ -14,8 +14,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "multi-coverage-visualization.helloWorld",
-        "title": "Hello World"
+        "command": "multi-coverage-visualization.loadCoverage",
+        "title": "Multi Coverage: Load Coverage File"
       }
     ]
   },
