@@ -4,5 +4,6 @@ export interface CoverageSource {
 	id: string;
 	name: string;
 	filePath: string;
+	color: string;
 	coverage: FileCoverage;
 }
