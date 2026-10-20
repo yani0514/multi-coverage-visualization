@@ -6,4 +6,5 @@ export interface CoverageSource {
 	filePath: string;
 	color: string;
 	coverage: FileCoverage;
+	enabled:boolean
 }

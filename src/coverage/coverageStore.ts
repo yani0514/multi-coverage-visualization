@@ -26,4 +26,14 @@ export class CoverageStore {
 	get size(): number {
 		return this.sources.size;
 	}
+
+	toggle(id: string): void {
+		const source = this.sources.get(id);
+
+		if (!source) {
+			return;
+		}
+
+		source.enabled = !source.enabled;
+	}
 }

@@ -16,8 +16,31 @@
       {
         "command": "multi-coverage-visualization.loadCoverage",
         "title": "Multi Coverage: Load Coverage File"
+      },
+      {
+        "command": "multi-coverage-visualization.toggleCoverageSource",
+        "title": "Multi Coverage: Toggle Coverage Source"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "multiCoverage",
+          "title": "Multi Coverage",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "multiCoverage": [
+        {
+          "id": "multiCoverage.sources",
+          "name": "Coverage Sources",
+          "icon": "resources/icon.svg",
+          "contextualTitle": "Multi Coverage"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
