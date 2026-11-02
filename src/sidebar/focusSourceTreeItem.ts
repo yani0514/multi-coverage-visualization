@@ -12,6 +12,7 @@ export class FocusSourceTreeItem extends vscode.TreeItem {
 		this.tooltip = source
 			? `Focus on ${source.name}\n${source.filePath}`
 			: 'Compare all enabled sources without a focus.';
+		this.accessibilityInformation = { label: `${source?.name ?? 'None'}, ${selected ? 'selected' : 'not selected'} focus source.` };
 		this.command = {
 			command: 'multi-coverage-visualization.setFocusSource',
 			title: source ? `Focus on ${source.name}` : 'Clear Focus Source',

@@ -7,6 +7,7 @@ export class DisplayTreeItem extends vscode.TreeItem {
 		super(info.label, vscode.TreeItemCollapsibleState.None);
 		this.id = option;
 		this.tooltip = info.tooltip;
+		this.accessibilityInformation = { label: `${info.label}. ${info.tooltip}` };
 		this.checkboxState = enabled ? vscode.TreeItemCheckboxState.Checked : vscode.TreeItemCheckboxState.Unchecked;
 		this.command = {
 			command: 'multi-coverage-visualization.toggleDisplayOption',

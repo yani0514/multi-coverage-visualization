@@ -177,11 +177,14 @@ export class MarkerManager {
 						);
 
 					return `
+						<circle cx="${cx}" cy="5" r="3" fill="#ffffff"/>
 						<circle
 							cx="${cx}"
 							cy="5"
-							r="3"
+							r="2.4"
 							fill="${color}"
+							stroke="#202020"
+							stroke-width="0.6"
 						/>
 					`;
 				})

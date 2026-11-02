@@ -16,6 +16,20 @@ function mappedStats(): Extract<CurrentFileStats, { state: 'mapped' }> {
 }
 
 suite('Current File tree', () => {
+	test('single-line counts use consistent pluralization and useful empty-state tooltips', () => {
+		const provider = new CurrentFileTreeProvider();
+		try {
+			assert.ok(provider.getChildren()[0].tooltip);
+			const stats = mappedStats();
+			stats.sources[0].count = 1;
+			stats.combined = stats.exclusive = 1;
+			provider.update(stats);
+			assert.strictEqual(provider.getChildren()[1].description, '1 line');
+			assert.strictEqual(provider.getChildren()[3].description, '1 line');
+			provider.update({ state: 'unmapped', localPath: '/outside.php' });
+			assert.match(String(provider.getChildren()[0].tooltip), /Configure Path Mapping/);
+		} finally { provider.dispose(); }
+	});
 	test('shows filename, colored source counts and all aggregate rows without commands', () => {
 		const provider = new CurrentFileTreeProvider();
 		try {

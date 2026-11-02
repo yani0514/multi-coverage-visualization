@@ -27,6 +27,7 @@ export class ComparisonTreeItem extends vscode.TreeItem {
 		);
 
 		this.tooltip = info.description;
+		this.accessibilityInformation = { label: `${info.label}, ${selected ? 'selected' : 'not selected'}. ${info.description}` };
 
 		this.contextValue =
 			'coverageComparisonMode';

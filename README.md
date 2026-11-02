@@ -47,7 +47,11 @@ Coverage line `0` is ignored, and coverage line numbers are converted from
 
 - **Coverage Sources** lists every loaded JSON file. A filled colored circle means
   the source is enabled; an outlined circle means it is disabled. Right-click a
-  source to remove it.
+  source for **Show Only This Source**, **Focus This Source** (enabled runs only),
+  or **Remove Source**. The view toolbar provides Load, Enable All, and Disable All;
+  path configuration remains in the **...** menu. Source icons and marker dots
+  have light/dark outlines so their shape remains visible across themes. Source
+  colors and background opacity are unchanged.
 - **Comparison** selects which lines are visible. The selected mode applies to
   both background highlights and overlap markers.
 - **Focus Source** selects one enabled run or **None**. With a focus, Comparison
@@ -106,8 +110,8 @@ and N-of-M rules are session-only, like the loaded coverage sources.
 
 Right-click a Coverage Sources row and select **Show Only This Source** to enable
 that run and disable every other run. This does not select a focus. An existing
-focus remains only if its run is still enabled. Enable All and Disable All remain
-available in the Coverage Sources **...** menu.
+focus remains only if its run is still enabled. Enable All and Disable All are
+available in the Coverage Sources toolbar.
 
 ## Commands
 
@@ -115,12 +119,13 @@ available in the Coverage Sources **...** menu.
 | --- | --- |
 | `Multi Coverage: Load Coverage File` | Load or reload a coverage JSON file |
 | `Multi Coverage: Toggle Coverage Source` | Enable or disable a source |
-| `Multi Coverage: Enable All Coverage Sources` | Enable every loaded source |
-| `Multi Coverage: Disable All Coverage Sources` | Disable every loaded source |
-| `Multi Coverage: Remove Coverage Source` | Unload a source |
+| `Multi Coverage: Enable All Sources` | Enable every loaded source |
+| `Multi Coverage: Disable All Sources` | Disable every loaded source |
+| `Multi Coverage: Remove Source` | Source context action: unload a source |
 | `Multi Coverage: Set Comparison Mode` | Switch comparison mode |
 | `Multi Coverage: Configure Path Mapping` | Replace the workspace's coverage and local roots |
 | `Show Only This Source` | Source context action: enable this run and disable the others |
+| `Focus This Source` | Source context action: focus an enabled run |
 
 ## Workspace configuration
 

@@ -24,6 +24,7 @@ export class AdvancedComparisonTreeProvider implements vscode.TreeDataProvider<v
 				const item = this.row(side, `Source ${side === 'sourceA' ? 'A' : 'B'}`, undefined, 'selectPairwiseSource', [side]);
 				item.description = source?.name ?? 'Not selected';
 				item.tooltip = source?.filePath;
+				item.accessibilityInformation = { label: `${item.label}, ${item.description}. Activate to change this source.` };
 				rows.push(item);
 			}
 			for (const info of PAIRWISE_OPERATIONS) {
@@ -35,6 +36,8 @@ export class AdvancedComparisonTreeProvider implements vscode.TreeDataProvider<v
 			const available = this.sources.length >= 2;
 			const item = this.row('pairwise', 'Pairwise Comparison', false, available ? 'configurePairwise' : undefined);
 			item.description = available ? 'Choose A and B' : 'Requires two enabled sources';
+			item.tooltip = available ? 'Choose two enabled coverage sources to compare.' : 'Enable at least two runs in Coverage Sources to compare a pair.';
+			item.accessibilityInformation = { label: `Pairwise Comparison. ${item.description}.` };
 			rows.push(item);
 		}
 		const multiplicity = this.row('multiplicity', 'N-of-M Filter', selection.kind === 'multiplicity', this.sources.length ? 'configureMultiplicity' : undefined);
@@ -42,6 +45,7 @@ export class AdvancedComparisonTreeProvider implements vscode.TreeDataProvider<v
 			? `${selection.rule === 'at-least' ? 'At least' : 'Exactly'} ${selection.count} of ${this.sources.length}`
 			: this.sources.length ? 'Configure…' : 'Requires an enabled source';
 		multiplicity.tooltip = 'Count coverage across all enabled sources; replaces standard and pairwise selection.';
+		multiplicity.accessibilityInformation = { label: `N-of-M Filter, ${selection.kind === 'multiplicity' ? 'selected' : 'not selected'}, ${multiplicity.description}.` };
 		rows.push(multiplicity);
 		return rows;
 	}
@@ -49,6 +53,7 @@ export class AdvancedComparisonTreeProvider implements vscode.TreeDataProvider<v
 	private row(id: string, label: string, selected?: boolean, command?: string, args: unknown[] = []): vscode.TreeItem {
 		const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
 		item.id = id;
+		item.accessibilityInformation = { label: `${label}${selected === undefined ? '' : `, ${selected ? 'selected' : 'not selected'}`}` };
 		if (selected !== undefined) { item.iconPath = new vscode.ThemeIcon(selected ? 'circle-filled' : 'circle-outline'); }
 		if (command) { item.command = { command: `multi-coverage-visualization.${command}`, title: label, arguments: args }; }
 		return item;

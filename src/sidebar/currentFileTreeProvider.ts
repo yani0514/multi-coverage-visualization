@@ -23,16 +23,22 @@ export class CurrentFileTreeProvider implements vscode.TreeDataProvider<CurrentF
 		}
 		const stats = this.stats;
 		if (stats.state === 'no-editor') {
-			return [new CurrentFileTreeItem('empty', 'No active editor')];
+			const item = new CurrentFileTreeItem('empty', 'No active editor');
+			item.tooltip = 'Open a local source file to inspect its coverage.';
+			return [item];
 		}
 		if (stats.state === 'unmapped') {
-			return [new CurrentFileTreeItem('empty', 'No mapped coverage')];
+			const item = new CurrentFileTreeItem('empty', 'No mapped coverage');
+			item.tooltip = `${stats.localPath}\nLoad coverage for this file or use Multi Coverage: Configure Path Mapping.`;
+			return [item];
 		}
 		const file = new CurrentFileTreeItem('file', path.basename(stats.localPath));
 		file.iconPath = new vscode.ThemeIcon('file-code');
 		file.tooltip = `${stats.localPath}\nCoverage path: ${stats.coveragePath}`;
 		if (stats.sources.length === 0) {
-			return [file, new CurrentFileTreeItem('empty', 'No enabled coverage sources')];
+			const item = new CurrentFileTreeItem('empty', 'No enabled coverage sources');
+			item.tooltip = 'Enable a run in Coverage Sources to see its line counts.';
+			return [file, item];
 		}
 		const sourceRows = stats.sources.map(source => {
 			const item = new CurrentFileTreeItem(`source:${source.id}`, source.name, lineCount(source.count));

@@ -6,5 +6,6 @@ export class CurrentFileTreeItem extends vscode.TreeItem {
 		super(label, vscode.TreeItemCollapsibleState.None);
 		this.id = id;
 		this.description = description;
+		this.accessibilityInformation = { label: description ? `${label}, ${description}` : label };
 	}
 }

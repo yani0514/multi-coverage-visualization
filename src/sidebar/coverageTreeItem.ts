@@ -13,8 +13,9 @@ export class CoverageTreeItem extends vscode.TreeItem {
 
 		this.id = source.id;
 		this.tooltip = `${source.name}\nStatus: ${source.enabled ? 'Enabled' : 'Disabled'}\nPath: ${source.filePath}`;
+		this.accessibilityInformation = { label: `${source.name}, ${source.enabled ? 'enabled' : 'disabled'}. Activate to ${source.enabled ? 'disable' : 'enable'} this coverage source.` };
 
-		this.contextValue = 'coverageSource';
+		this.contextValue = source.enabled ? 'coverageSource.enabled' : 'coverageSource.disabled';
 
 		this.iconPath =
 			createSourceColorIcon(

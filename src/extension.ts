@@ -31,6 +31,7 @@ import { DisplayOptionKey, isDisplayOptionKey } from './editor/displayOptions';
 import { AdvancedComparison } from './coverage/advancedComparison';
 import { AdvancedComparisonTreeProvider } from './sidebar/advancedComparisonTreeProvider';
 import { registerAdvancedComparisonCommands } from './sidebar/advancedComparisonCommands';
+import { coverageLoadFailure, failureReason } from './ui/userMessages';
 
 export function activate(
 	context: vscode.ExtensionContext
@@ -151,8 +152,9 @@ export function activate(
 		try {
 			await save();
 		} catch (error) {
+			console.error('Could not save Multi Coverage configuration:', error);
 			void vscode.window.showWarningMessage(
-				`Multi Coverage: configuration is active for this session but could not be saved: ${error}`
+				'Multi Coverage: changes are active for this session but could not be saved. Check workspace storage permissions.'
 			);
 		}
 	};
@@ -174,7 +176,8 @@ export function activate(
 				await persistConfiguration(() => workspaceConfig.savePathMapping(mapping));
 				return true;
 			} catch (error) {
-				void vscode.window.showErrorMessage(`Failed to configure path mapping: ${error}`);
+				console.error('Could not configure path mapping:', error);
+				void vscode.window.showErrorMessage(`Could not configure path mapping: ${failureReason(error)}.`);
 				return false;
 			} finally {
 				mappingRequest = undefined;
@@ -265,7 +268,7 @@ export function activate(
 
 						if (!pathMapping) {
 							vscode.window.showWarningMessage(
-								'Coverage file loaded, but path mapping was not configured.'
+								'Coverage loaded. Use Multi Coverage: Configure Path Mapping to display it.'
 							);
 
 							return;
@@ -280,7 +283,7 @@ export function activate(
 					refreshVisualization();
 				} catch (error) {
 					vscode.window.showErrorMessage(
-						`Failed to load coverage file "${selectedFile.fsPath}": ${error}`
+						coverageLoadFailure(path.basename(selectedFile.fsPath), error)
 					);
 
 					console.error(
@@ -375,6 +378,16 @@ export function activate(
 			refreshVisualization();
 		}
 	);
+	const focusSourceContextCommand = vscode.commands.registerCommand(
+		'multi-coverage-visualization.focusCoverageSource',
+		(argument: unknown) => {
+			const sourceId = getCoverageSourceId(argument);
+			if (sourceId === undefined || !store.get(sourceId)?.enabled) { return; }
+			advancedComparison.reset();
+			focusSelection.select(sourceId);
+			refreshVisualization();
+		}
+	);
 	const showOnlySourceCommand = vscode.commands.registerCommand(
 		'multi-coverage-visualization.showOnlyCoverageSource',
 		(argument: unknown) => {
@@ -430,6 +443,7 @@ export function activate(
 		removeCoverageSourceCommand,
 		setComparisonModeCommand,
 		setFocusSourceCommand,
+		focusSourceContextCommand,
 		showOnlySourceCommand,
 		toggleDisplayCommand,
 		displayCheckboxListener,

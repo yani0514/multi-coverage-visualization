@@ -22,7 +22,7 @@ suite('Extension activation and commands', () => {
 	});
 
 	test('source actions ignore absent, malformed and stale arguments without throwing', async () => {
-		for (const command of ['toggleCoverageSource', 'removeCoverageSource', 'showOnlyCoverageSource']) {
+		for (const command of ['toggleCoverageSource', 'removeCoverageSource', 'showOnlyCoverageSource', 'focusCoverageSource']) {
 			for (const argument of [undefined, null, {}, { source: null }, { source: {} }, { source: { id: 42 } }, 42, 'not-a-loaded-source']) {
 				await assert.doesNotReject(async () => {
 					await vscode.commands.executeCommand(`multi-coverage-visualization.${command}`, argument);

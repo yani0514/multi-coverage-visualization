@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { PathMapping } from '../paths/pathMapping';
 import { isAbsoluteCoverageRoot } from './workspaceConfig';
+import { failureReason } from '../ui/userMessages';
 
 export interface PathMappingPrompts {
 	input(options: vscode.InputBoxOptions): Thenable<string | undefined>;
@@ -55,7 +56,8 @@ export async function askForPathMapping(
 			throw new Error('The selected path is not a directory.');
 		}
 	} catch (error) {
-		prompts.error(`Cannot use local project root "${folder.fsPath}": ${error}`);
+		console.error('Cannot use local project root:', folder.fsPath, error);
+		prompts.error(`Cannot use local project root "${folder.fsPath}": ${failureReason(error)}. Choose an accessible folder.`);
 		return undefined;
 	}
 	return { coverageRoot: coverageRoot.trim(), localRoot: folder.fsPath };

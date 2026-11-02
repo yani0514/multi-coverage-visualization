@@ -13,6 +13,7 @@
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
+      { "command": "multi-coverage-visualization.focusCoverageSource", "title": "Multi Coverage: Focus This Source", "shortTitle": "Focus This Source" },
       { "command": "multi-coverage-visualization.configurePairwise", "title": "Multi Coverage: Configure Pairwise Comparison" },
       { "command": "multi-coverage-visualization.configureMultiplicity", "title": "Multi Coverage: Configure N-of-M Filter" },
       { "command": "multi-coverage-visualization.useStandardComparison", "title": "Multi Coverage: Use Comparison / Focus" },
@@ -28,7 +29,8 @@
       },
       {
         "command": "multi-coverage-visualization.showOnlyCoverageSource",
-        "title": "Show Only This Source"
+        "title": "Multi Coverage: Show Only This Source",
+        "shortTitle": "Show Only This Source"
       },
       {
         "command": "multi-coverage-visualization.configurePathMapping",
@@ -50,17 +52,20 @@
       },
       {
         "command": "multi-coverage-visualization.enableAllCoverageSources",
-        "title": "Multi Coverage: Enable All Coverage Sources",
+        "title": "Multi Coverage: Enable All Sources",
+        "shortTitle": "Enable All",
         "icon": "$(check-all)"
       },
       {
         "command": "multi-coverage-visualization.disableAllCoverageSources",
-        "title": "Multi Coverage: Disable All Coverage Sources",
+        "title": "Multi Coverage: Disable All Sources",
+        "shortTitle": "Disable All",
         "icon": "$(circle-slash)"
       },
       {
         "command": "multi-coverage-visualization.removeCoverageSource",
-        "title": "Multi Coverage: Remove Coverage Source",
+        "title": "Multi Coverage: Remove Source",
+        "shortTitle": "Remove Source",
         "icon": "$(trash)"
       }
     ],
@@ -116,6 +121,7 @@
     ],
     "menus": {
       "commandPalette": [
+        { "command": "multi-coverage-visualization.focusCoverageSource", "when": "false" },
         { "command": "multi-coverage-visualization.selectPairwiseSource", "when": "false" },
         { "command": "multi-coverage-visualization.setPairwiseOperation", "when": "false" },
         {
@@ -157,30 +163,35 @@
         {
           "command": "multi-coverage-visualization.enableAllCoverageSources",
           "when": "view == multiCoverage.sources && multiCoverage.hasSources",
-          "group": "1_state@1"
+          "group": "navigation@2"
         },
         {
           "command": "multi-coverage-visualization.disableAllCoverageSources",
           "when": "view == multiCoverage.sources && multiCoverage.hasSources",
-          "group": "1_state@2"
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
         {
           "command": "multi-coverage-visualization.showOnlyCoverageSource",
-          "when": "view == multiCoverage.sources && viewItem == coverageSource",
+          "when": "view == multiCoverage.sources && viewItem =~ /^coverageSource\\./",
           "group": "1_state@1"
         },
         {
+          "command": "multi-coverage-visualization.focusCoverageSource",
+          "when": "view == multiCoverage.sources && viewItem == coverageSource.enabled",
+          "group": "1_state@2"
+        },
+        {
           "command": "multi-coverage-visualization.removeCoverageSource",
-          "when": "view == multiCoverage.sources && viewItem == coverageSource",
-          "group": "1_modification@1"
+          "when": "view == multiCoverage.sources && viewItem =~ /^coverageSource\\./",
+          "group": "2_modification@1"
         }
       ]
     }
   },
   "scripts": {
-    "test:unit": "npm run compile-tests && node node_modules/mocha/bin/mocha.js --ui tdd out/test/workspaceConfig.test.js out/test/parser.test.js out/test/pathResolver.test.js out/test/comparisonFilter.test.js out/test/focusComparison.test.js out/test/advancedComparison.test.js out/test/coverageAnalysis.test.js",
+    "test:unit": "npm run compile-tests && node node_modules/mocha/bin/mocha.js --ui tdd out/test/workspaceConfig.test.js out/test/parser.test.js out/test/pathResolver.test.js out/test/comparisonFilter.test.js out/test/focusComparison.test.js out/test/advancedComparison.test.js out/test/coverageAnalysis.test.js out/test/userMessages.test.js",
     "benchmark": "npm run compile-tests && node --expose-gc benchmarks/coverage-benchmark.cjs",
     "vscode:prepublish": "npm run package",
     "compile": "npm run check-types && npm run lint && node esbuild.js",
