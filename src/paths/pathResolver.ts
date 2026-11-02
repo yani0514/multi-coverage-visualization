@@ -9,7 +9,7 @@ export class PathResolver {
 		const normalizedCoveragePath = this.normalize(coveragePath);
 		const normalizedCoverageRoot = this.normalize(mapping.coverageRoot);
 
-		if (!normalizedCoveragePath.startsWith(normalizedCoverageRoot)) {
+		if (!this.isWithinRoot(normalizedCoveragePath, normalizedCoverageRoot)) {
 			return undefined;
 		}
 
@@ -31,7 +31,11 @@ export class PathResolver {
 		const normalizedLocal = this.normalize(localFilePath);
 		const normalizedLocalRoot = this.normalize(mapping.localRoot);
 
-		if (!normalizedLocal.startsWith(normalizedLocalRoot)) {
+		// Windows local paths are case-insensitive; VS Code normalizes drive letters.
+		const windowsPath = /^[a-z]:\//i.test(normalizedLocalRoot) || normalizedLocalRoot.startsWith('//');
+		const comparableLocal = windowsPath ? normalizedLocal.toLowerCase() : normalizedLocal;
+		const comparableRoot = windowsPath ? normalizedLocalRoot.toLowerCase() : normalizedLocalRoot;
+		if (!this.isWithinRoot(comparableLocal, comparableRoot)) {
 			return undefined;
 		}
 
@@ -50,6 +54,10 @@ export class PathResolver {
 		}
 
 		return undefined;
+	}
+
+	private isWithinRoot(filePath: string, root: string): boolean {
+		return filePath === root || filePath.startsWith(`${root}/`);
 	}
 
 	private normalize(filePath: string): string {

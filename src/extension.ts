@@ -1,45 +1,148 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { WorkspaceConfig } from './config/workspaceConfig';
+import { askForPathMapping } from './config/configurePathMapping';
 
 import { parseCoverageFile } from './coverage/parser';
 import { CoverageStore } from './coverage/coverageStore';
 import { CoverageQuery } from './coverage/coverageQuery';
 import { CoverageSource } from './coverage/types';
+import {
+	ComparisonMode,
+	isComparisonMode
+} from './coverage/comparisonMode';
 
 import { PathResolver } from './paths/pathResolver';
-import { PathMapping } from './paths/pathMapping';
 
 import { DecorationManager } from './editor/decorationManager';
 import { getCoverageColor } from './editor/coverageColors';
 import { MarkerManager } from './editor/markerManager';
+import { EditorCoverageRenderer } from './editor/editorCoverageRenderer';
 
 import { CoverageTreeProvider } from './sidebar/coverageTreeProvider';
+import { CoverageTreeItem } from './sidebar/coverageTreeItem';
+import { ComparisonTreeProvider } from './sidebar/comparisonTreeProvider';
 
-export function activate(context: vscode.ExtensionContext) {
+export function activate(
+	context: vscode.ExtensionContext
+) {
 	console.log(
 		'========== MULTI COVERAGE EXTENSION ACTIVATED =========='
 	);
 
 	const store = new CoverageStore();
+	const workspaceConfig = new WorkspaceConfig(context.workspaceState);
 	const query = new CoverageQuery(store);
 
 	const pathResolver = new PathResolver();
 
-	const decorationManager = new DecorationManager();
+	const decorationManager =
+		new DecorationManager();
 	const markerManager = new MarkerManager();
 
 	const coverageTreeProvider =
 		new CoverageTreeProvider(store);
 
+	const comparisonTreeProvider =
+		new ComparisonTreeProvider(workspaceConfig.getComparisonMode());
+
+	let pathMapping = workspaceConfig.getPathMapping();
+
+	const renderer =
+		new EditorCoverageRenderer({
+			store,
+			query,
+			pathResolver,
+			decorationManager,
+			markerManager,
+			getPathMapping: () =>
+				pathMapping,
+			getComparisonMode: () =>
+				comparisonTreeProvider.getMode()
+		});
+
 	const coverageTreeView =
 		vscode.window.createTreeView(
 			'multiCoverage.sources',
 			{
-				treeDataProvider: coverageTreeProvider
+				treeDataProvider:
+					coverageTreeProvider
 			}
 		);
 
-	let pathMapping: PathMapping | undefined;
+	const comparisonTreeView =
+		vscode.window.createTreeView(
+			'multiCoverage.comparison',
+			{
+				treeDataProvider:
+					comparisonTreeProvider
+			}
+		);
+
+	const updateSourceContext = () => {
+		void vscode.commands.executeCommand(
+			'setContext',
+			'multiCoverage.hasSources',
+			store.size > 0
+		);
+	};
+
+	const refreshSources = () => {
+		coverageTreeProvider.refresh();
+		updateSourceContext();
+	};
+
+	const refreshVisualization = () => {
+		renderer.refreshActiveEditor();
+	};
+
+	const refreshSourcesAndVisualization =
+		() => {
+			refreshSources();
+			refreshVisualization();
+		};
+
+	updateSourceContext();
+
+	// Apply changes immediately; a storage failure must not disable this session.
+	const persistConfiguration = async (save: () => Promise<void>) => {
+		try {
+			await save();
+		} catch (error) {
+			void vscode.window.showWarningMessage(
+				`Multi Coverage: configuration is active for this session but could not be saved: ${error}`
+			);
+		}
+	};
+
+	// Share an in-progress dialog between load/configure commands.
+	let mappingRequest: Promise<boolean> | undefined;
+	const configureMapping = (): Promise<boolean> => {
+		if (mappingRequest) {
+			return mappingRequest;
+		}
+		mappingRequest = (async () => {
+			try {
+				const mapping = await askForPathMapping(pathMapping);
+				if (!mapping) {
+					return false;
+				}
+				pathMapping = mapping;
+				refreshVisualization();
+				await persistConfiguration(() => workspaceConfig.savePathMapping(mapping));
+				return true;
+			} catch (error) {
+				void vscode.window.showErrorMessage(`Failed to configure path mapping: ${error}`);
+				return false;
+			} finally {
+				mappingRequest = undefined;
+			}
+		})();
+		return mappingRequest;
+	};
+	const configureMappingCommand = vscode.commands.registerCommand(
+		'multi-coverage-visualization.configurePathMapping', configureMapping
+	);
 
 	/*
 	 * Load Coverage File
@@ -51,13 +154,19 @@ export function activate(context: vscode.ExtensionContext) {
 				const files =
 					await vscode.window.showOpenDialog({
 						canSelectMany: false,
-						openLabel: 'Load Coverage File',
+						openLabel:
+							'Load Coverage File',
 						filters: {
-							'JSON Coverage Files': ['json']
+							'JSON Coverage Files': [
+								'json'
+							]
 						}
 					});
 
-				if (!files || files.length === 0) {
+				if (
+					!files ||
+					files.length === 0
+				) {
 					return;
 				}
 
@@ -70,14 +179,17 @@ export function activate(context: vscode.ExtensionContext) {
 						);
 
 					const existingSource =
-						store.get(selectedFile.fsPath);
+						store.get(
+							selectedFile.fsPath
+						);
 
 					const source: CoverageSource = {
 						id: selectedFile.fsPath,
 						name: path.basename(
 							selectedFile.fsPath
 						),
-						filePath: selectedFile.fsPath,
+						filePath:
+							selectedFile.fsPath,
 						color:
 							existingSource?.color ??
 							getCoverageColor(
@@ -91,11 +203,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 					store.add(source);
 
-					coverageTreeProvider.refresh();
+					refreshSources();
 
 					vscode.window.showInformationMessage(
 						`Loaded ${source.name}. ` +
-						`Total coverage sources: ${store.size}`
+							`Total coverage sources: ${store.size}`
 					);
 
 					console.log(
@@ -107,8 +219,7 @@ export function activate(context: vscode.ExtensionContext) {
 					 * Ask for path mapping only once.
 					 */
 					if (!pathMapping) {
-						pathMapping =
-							await askForPathMapping();
+						await configureMapping();
 
 						if (!pathMapping) {
 							vscode.window.showWarningMessage(
@@ -124,17 +235,10 @@ export function activate(context: vscode.ExtensionContext) {
 						);
 					}
 
-					await refreshActiveEditor(
-						store,
-						query,
-						pathResolver,
-						pathMapping,
-						decorationManager,
-						markerManager
-					);
+					refreshVisualization();
 				} catch (error) {
 					vscode.window.showErrorMessage(
-						`Failed to load coverage file: ${error}`
+						`Failed to load coverage file "${selectedFile.fsPath}": ${error}`
 					);
 
 					console.error(
@@ -151,19 +255,69 @@ export function activate(context: vscode.ExtensionContext) {
 	const toggleCoverageSourceCommand =
 		vscode.commands.registerCommand(
 			'multi-coverage-visualization.toggleCoverageSource',
-			async (sourceId: string) => {
+			(sourceId: string) => {
 				store.toggle(sourceId);
 
-				coverageTreeProvider.refresh();
+				refreshSourcesAndVisualization();
+			}
+		);
 
-				await refreshActiveEditor(
-					store,
-					query,
-					pathResolver,
-					pathMapping,
-					decorationManager,
-					markerManager
+	/*
+	 * Enable / Disable All Sources
+	 */
+	const enableAllCoverageSourcesCommand =
+		vscode.commands.registerCommand(
+			'multi-coverage-visualization.enableAllCoverageSources',
+			() => {
+				store.setAllEnabled(true);
+
+				refreshSourcesAndVisualization();
+			}
+		);
+
+	const disableAllCoverageSourcesCommand =
+		vscode.commands.registerCommand(
+			'multi-coverage-visualization.disableAllCoverageSources',
+			() => {
+				store.setAllEnabled(false);
+
+				refreshSourcesAndVisualization();
+			}
+		);
+
+	/*
+	 * Remove Coverage Source
+	 */
+	const removeCoverageSourceCommand =
+		vscode.commands.registerCommand(
+			'multi-coverage-visualization.removeCoverageSource',
+			(item: CoverageTreeItem | string) => {
+				const sourceId = typeof item === 'string'
+					? item
+					: item.source.id;
+				store.remove(sourceId);
+
+				refreshSourcesAndVisualization();
+			}
+		);
+
+	/*
+	 * Set Comparison Mode
+	 */
+	const setComparisonModeCommand =
+		vscode.commands.registerCommand(
+			'multi-coverage-visualization.setComparisonMode',
+			async (mode: ComparisonMode) => {
+				if (!isComparisonMode(mode)) {
+					return;
+				}
+
+				comparisonTreeProvider.setMode(
+					mode
 				);
+
+				refreshVisualization();
+				await persistConfiguration(() => workspaceConfig.saveComparisonMode(mode));
 			}
 		);
 
@@ -173,23 +327,24 @@ export function activate(context: vscode.ExtensionContext) {
 	 */
 	const editorChangeListener =
 		vscode.window.onDidChangeActiveTextEditor(
-			async () => {
-				await refreshActiveEditor(
-					store,
-					query,
-					pathResolver,
-					pathMapping,
-					decorationManager,
-					markerManager
-				);
+			() => {
+				refreshVisualization();
 			}
 		);
 
 	context.subscriptions.push(
+		configureMappingCommand,
 		loadCoverageCommand,
 		toggleCoverageSourceCommand,
+		enableAllCoverageSourcesCommand,
+		disableAllCoverageSourcesCommand,
+		removeCoverageSourceCommand,
+		setComparisonModeCommand,
 		editorChangeListener,
 		coverageTreeView,
+		comparisonTreeView,
+		coverageTreeProvider,
+		comparisonTreeProvider,
 		{
 			dispose: () =>
 				decorationManager.dispose()
@@ -199,202 +354,7 @@ export function activate(context: vscode.ExtensionContext) {
 				markerManager.dispose()
 		}
 	);
-}
-
-async function refreshActiveEditor(
-	store: CoverageStore,
-	query: CoverageQuery,
-	pathResolver: PathResolver,
-	pathMapping: PathMapping | undefined,
-	decorationManager: DecorationManager,
-	markerManager: MarkerManager
-): Promise<void> {
-	const editor =
-		vscode.window.activeTextEditor;
-
-	if (!editor) {
-		return;
-	}
-
-	/*
-	 * Always clear existing visualization first.
-	 */
-	decorationManager.clear(editor);
-	markerManager.clear(editor);
-
-	if (!pathMapping) {
-		return;
-	}
-
-	const localPath =
-		editor.document.uri.fsPath;
-
-	console.log(
-		'Currently opened local file:',
-		localPath
-	);
-
-	const coveragePaths =
-		getAllCoveragePaths(store);
-
-	const matchedCoveragePath =
-		pathResolver.resolveCoveragePath(
-			localPath,
-			coveragePaths,
-			pathMapping
-		);
-
-	console.log(
-		'Matched coverage path:',
-		matchedCoveragePath
-	);
-
-	if (!matchedCoveragePath) {
-		return;
-	}
-
-	/*
-	 * Get coverage from all loaded sources.
-	 */
-	const fileCoverage =
-		query.getCoverageForFile(
-			matchedCoveragePath
-		);
-
-	/*
-	 * Remove disabled coverage sources
-	 * from the visualization.
-	 */
-	const enabledFileCoverage =
-		new Map<number, CoverageSource[]>();
-
-	for (const [line, sources] of fileCoverage) {
-		const enabledSourcesForLine =
-			sources.filter(
-				source => source.enabled
-			);
-
-		if (
-			enabledSourcesForLine.length > 0
-		) {
-			enabledFileCoverage.set(
-				line,
-				enabledSourcesForLine
-			);
-		}
-	}
-
-	const enabledSources =
-		store
-			.getAll()
-			.filter(
-				source => source.enabled
-			);
-
-	/*
-	 * Apply source-specific background
-	 * highlighting.
-	 */
-	for (
-		const coverageSource
-		of enabledSources
-	) {
-		const linesForSource: number[] = [];
-
-		for (
-			const [line, sources]
-			of enabledFileCoverage
-		) {
-			const isCoveredBySource =
-				sources.some(
-					source =>
-						source.id ===
-						coverageSource.id
-				);
-
-			if (isCoveredBySource) {
-				linesForSource.push(line);
-			}
-		}
-
-		decorationManager.applySourceCoverage(
-			editor,
-			coverageSource.id,
-			coverageSource.color,
-			linesForSource
-		);
-	}
-
-	/*
-	 * Apply multi-coverage end-of-line
-	 * markers.
-	 */
-	markerManager.applyMarkers(
-		editor,
-		enabledFileCoverage
-	);
-
-	console.log(
-		`Coverage refreshed for ${path.basename(localPath)}`
-	);
-}
-
-async function askForPathMapping():
-	Promise<PathMapping | undefined> {
-
-	const coverageRoot =
-		await vscode.window.showInputBox({
-			title: 'Coverage Root',
-			prompt:
-				'Enter the root path used inside the coverage JSON.',
-			placeHolder:
-				'/var/www/html/addressbook',
-			ignoreFocusOut: true
-		});
-
-	if (!coverageRoot) {
-		return undefined;
-	}
-
-	const localRootSelection =
-		await vscode.window.showOpenDialog({
-			canSelectFiles: false,
-			canSelectFolders: true,
-			canSelectMany: false,
-			openLabel: 'Select Local Project Root',
-			title:
-				'Select the local project root'
-		});
-
-	if (
-		!localRootSelection ||
-		localRootSelection.length === 0
-	) {
-		return undefined;
-	}
-
-	return {
-		coverageRoot,
-		localRoot:
-			localRootSelection[0].fsPath
-	};
-}
-
-function getAllCoveragePaths(
-	store: CoverageStore
-): string[] {
-	const paths = new Set<string>();
-
-	for (const source of store.getAll()) {
-		for (
-			const coveragePath
-			of source.coverage.keys()
-		) {
-			paths.add(coveragePath);
-		}
-	}
-
-	return Array.from(paths);
+	refreshVisualization();
 }
 
 export function deactivate() {}

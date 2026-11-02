@@ -1,71 +1,123 @@
-# multi-coverage-visualization README
+# Multi Coverage Visualization
 
-This is the README for your extension "multi-coverage-visualization". After writing up a brief description, we recommend including the following sections.
+A VS Code extension for loading multiple code coverage JSON files and comparing
+them directly in the editor.
+
+Each coverage file is treated as an independent coverage source. Sources receive
+a stable color, so the same color is used in the sidebar, the line background,
+and the multi-source markers.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- Load multiple coverage JSON files successively, one file per source.
+- Stable, deterministic color assignment per coverage source.
+- Background highlighting for covered lines in `.php`, `.inc`, and other text
+  files.
+- Colored end-of-line markers showing which sources cover a shared line.
+- Hover information describing every source that covers a marked line.
+- Enable or disable individual coverage sources from the sidebar.
+- Compare sources using three modes:
 
-For example if there is an image subfolder under your extension project workspace:
+  | Mode | Visible lines |
+  | --- | --- |
+  | Combined | Covered by at least one enabled source |
+  | Shared | Covered by two or more enabled sources |
+  | Exclusive | Covered by exactly one enabled source |
 
-\!\[feature X\]\(images/feature-x.png\)
+- Automatic refresh when switching editor tabs or changing the comparison mode.
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+## Getting started
 
-## Requirements
+1. Open the **Multi Coverage** view in the Activity Bar.
+2. Use **Load Coverage File** in the **Coverage Sources** view title.
+3. When prompted, enter the root path used inside the coverage JSON and select
+   the matching local project root. For example:
+   - Coverage root: `/var/www/html/addressbook`
+   - Local root: `C:\Users\...\addressbook`
+4. Open a source file. Covered lines are highlighted automatically.
+5. Use the **Comparison** view to switch between Combined, Shared, and Exclusive
+   coverage.
+6. Click a source in **Coverage Sources** to enable or disable it. The editor and
+   all comparison modes update immediately.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+Coverage line `0` is ignored, and coverage line numbers are converted from
+1-based JSON lines to 0-based editor lines.
 
-## Extension Settings
+## Sidebar
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+- **Coverage Sources** lists every loaded JSON file. A filled colored circle means
+  the source is enabled; an outlined circle means it is disabled. Right-click a
+  source to remove it.
+- **Comparison** selects which lines are visible. The selected mode applies to
+  both background highlights and overlap markers.
 
-For example:
+## Commands
 
-This extension contributes the following settings:
+| Command | Description |
+| --- | --- |
+| `Multi Coverage: Load Coverage File` | Load or reload a coverage JSON file |
+| `Multi Coverage: Toggle Coverage Source` | Enable or disable a source |
+| `Multi Coverage: Enable All Coverage Sources` | Enable every loaded source |
+| `Multi Coverage: Disable All Coverage Sources` | Disable every loaded source |
+| `Multi Coverage: Remove Coverage Source` | Unload a source |
+| `Multi Coverage: Set Comparison Mode` | Switch comparison mode |
+| `Multi Coverage: Configure Path Mapping` | Replace the workspace's coverage and local roots |
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+## Workspace configuration
 
-## Known Issues
+Path mapping and the selected comparison mode are saved for the current workspace.
+When reopening that workspace, the Comparison view restores its selection. Load
+the coverage JSON files again to render coverage using the saved mapping; the
+mapping prompt appears only if no valid mapping is saved.
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+Run **Multi Coverage: Configure Path Mapping** from the Command Palette or the
+Coverage Sources view's **...** menu to replace the mapping. Current values are
+prefilled, cancelling preserves them, and a completed change refreshes the editor
+immediately. If saving fails, a warning explains that the change is session-only.
 
-## Release Notes
+Loaded JSON paths, coverage data, and source enabled states are not persisted.
+This keeps reloads explicit so old coverage runs and unavailable network files
+are not automatically opened on startup. Sources start enabled when loaded in a
+new session; reloading an existing source within a session retains its state.
+No prompts or coverage-file reads occur during activation.
 
-Users appreciate release notes as you update your extension.
+## Development
 
-### 1.0.0
+The native sidebar has independent source and comparison tree providers.
+`EditorCoverageRenderer` resolves the current file, queries raw coverage, removes
+disabled sources, and applies `comparisonFilter` before passing the same derived
+coverage to both decoration managers. Filtering never changes the stored maps.
+Additional Focus Source, Current File, and Display views can use separate providers
+without changing parsing or mixing display options with comparison rules.
 
-Initial release of ...
+```bash
+npm install
+npm run check-types
+npm run lint
+npm run compile
+npm test
+```
 
-### 1.0.1
+Press `F5` in VS Code to launch the extension development host.
 
-Fixed issue #.
+### Manual comparison check
 
-### 1.1.0
+1. Load two JSON files covering the same mapped file: A covers `1,2,3,5`,
+   B covers `2,3,4,5`.
+2. Check Combined shows `1,2,3,4,5`, Shared shows `2,3,5`, and Exclusive
+   shows `1,4`. Shared lines should retain both colored markers and their hover.
+3. Disable B. Combined and Exclusive should show `1,2,3,5`; Shared should be empty.
+4. Disable every source and confirm all highlights and markers disappear.
+5. Re-enable sources and switch between mapped `.php` and `.inc` files. The
+   comparison selection should stay active without reloading JSON files.
+6. Reload the same JSON file and confirm it replaces its entry while retaining
+   its color and enabled state. Right-click a source and check Remove works.
+7. Include line `0` and a line beyond the file length; neither should render.
 
-Added features X, Y, and Z.
+## Current limitations
 
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+- Loaded coverage sources and their enabled states are session-scoped.
+- Focus Source, Current File statistics, and Display toggles are planned but not
+  implemented yet.
+- Coverage is read from the aggregated JSON format where each file path maps to
+  an object of covered line numbers.

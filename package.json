@@ -9,17 +9,42 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": ["onStartupFinished"],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
+        "command": "multi-coverage-visualization.configurePathMapping",
+        "title": "Multi Coverage: Configure Path Mapping",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "multi-coverage-visualization.loadCoverage",
-        "title": "Multi Coverage: Load Coverage File"
+        "title": "Multi Coverage: Load Coverage File",
+        "icon": "$(add)"
+      },
+      {
+        "command": "multi-coverage-visualization.setComparisonMode",
+        "title": "Multi Coverage: Set Comparison Mode"
       },
       {
         "command": "multi-coverage-visualization.toggleCoverageSource",
         "title": "Multi Coverage: Toggle Coverage Source"
+      },
+      {
+        "command": "multi-coverage-visualization.enableAllCoverageSources",
+        "title": "Multi Coverage: Enable All Coverage Sources",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "multi-coverage-visualization.disableAllCoverageSources",
+        "title": "Multi Coverage: Disable All Coverage Sources",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "multi-coverage-visualization.removeCoverageSource",
+        "title": "Multi Coverage: Remove Coverage Source",
+        "icon": "$(trash)"
       }
     ],
     "viewsContainers": {
@@ -36,8 +61,63 @@
         {
           "id": "multiCoverage.sources",
           "name": "Coverage Sources",
-          "icon": "resources/icon.svg",
-          "contextualTitle": "Multi Coverage"
+          "icon": "resources/icon.svg"
+        },
+        {
+          "id": "multiCoverage.comparison",
+          "name": "Comparison",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "multiCoverage.sources",
+        "contents": "No coverage files loaded.\n[Load Coverage File](command:multi-coverage-visualization.loadCoverage)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "multi-coverage-visualization.setComparisonMode",
+          "when": "false"
+        },
+        {
+          "command": "multi-coverage-visualization.toggleCoverageSource",
+          "when": "false"
+        },
+        {
+          "command": "multi-coverage-visualization.removeCoverageSource",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "multi-coverage-visualization.configurePathMapping",
+          "when": "view == multiCoverage.sources",
+          "group": "2_configuration@1"
+        },
+        {
+          "command": "multi-coverage-visualization.loadCoverage",
+          "when": "view == multiCoverage.sources",
+          "group": "navigation@1"
+        },
+        {
+          "command": "multi-coverage-visualization.enableAllCoverageSources",
+          "when": "view == multiCoverage.sources && multiCoverage.hasSources",
+          "group": "1_state@1"
+        },
+        {
+          "command": "multi-coverage-visualization.disableAllCoverageSources",
+          "when": "view == multiCoverage.sources && multiCoverage.hasSources",
+          "group": "1_state@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "multi-coverage-visualization.removeCoverageSource",
+          "when": "view == multiCoverage.sources && viewItem == coverageSource",
+          "group": "1_modification@1"
         }
       ]
     }

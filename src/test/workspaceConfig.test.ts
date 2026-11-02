@@ -1,0 +1,100 @@
+import * as assert from 'assert';
+import * as path from 'path';
+import type { Memento } from 'vscode';
+import { WorkspaceConfig, isAbsoluteCoverageRoot } from '../config/workspaceConfig';
+
+class MemoryState implements Memento {
+	readonly values = new Map<string, unknown>();
+	failWrites = false;
+	keys(): readonly string[] { return [...this.values.keys()]; }
+	get<T>(key: string): T | undefined;
+	get<T>(key: string, defaultValue: T): T;
+	get<T>(key: string, defaultValue?: T): T | undefined {
+		return this.values.has(key) ? this.values.get(key) as T : defaultValue;
+	}
+	async update(key: string, value: unknown): Promise<void> {
+		if (this.failWrites) {
+			throw new Error('Storage unavailable');
+		}
+		this.values.set(key, JSON.parse(JSON.stringify(value)) as unknown);
+	}
+}
+
+suite('Workspace configuration', () => {
+	const mapping = { coverageRoot: '/remote/project', localRoot: path.resolve('local-project') };
+
+	test('missing state uses no mapping and Combined', () => {
+		const config = new WorkspaceConfig(new MemoryState());
+		assert.strictEqual(config.getPathMapping(), undefined);
+		assert.strictEqual(config.getComparisonMode(), 'combined');
+	});
+
+	test('a fresh manager restores saved mapping and every comparison mode', async () => {
+		const state = new MemoryState();
+		const config = new WorkspaceConfig(state);
+		await config.savePathMapping(mapping);
+		for (const mode of ['combined', 'shared', 'exclusive'] as const) {
+			await config.saveComparisonMode(mode);
+			const restarted = new WorkspaceConfig(state);
+			assert.deepStrictEqual(restarted.getPathMapping(), mapping);
+			assert.strictEqual(restarted.getComparisonMode(), mode);
+		}
+	});
+
+	test('reconfiguration replaces roots without changing comparison or another workspace', async () => {
+		const config = new WorkspaceConfig(new MemoryState());
+		const other = new WorkspaceConfig(new MemoryState());
+		await config.saveComparisonMode('shared');
+		await config.savePathMapping(mapping);
+		const replacement = { coverageRoot: '/new/root', localRoot: path.resolve('new-project') };
+		await config.savePathMapping(replacement);
+		assert.deepStrictEqual(config.getPathMapping(), replacement);
+		assert.strictEqual(config.getComparisonMode(), 'shared');
+		assert.strictEqual(other.getPathMapping(), undefined);
+		assert.strictEqual(other.getComparisonMode(), 'combined');
+	});
+
+	test('malformed saved values safely fall back', () => {
+		const state = new MemoryState();
+		const config = new WorkspaceConfig(state);
+		for (const invalid of [null, 1, 'mapping', [], {},
+			{ coverageRoot: '/remote', localRoot: 1 },
+			{ coverageRoot: 'relative', localRoot: mapping.localRoot },
+			{ coverageRoot: '/remote', localRoot: 'relative' },
+			{ coverageRoot: '/remote\0', localRoot: mapping.localRoot }]) {
+			state.values.set('multiCoverage.pathMapping', invalid);
+			assert.strictEqual(config.getPathMapping(), undefined);
+		}
+		for (const invalid of [null, 'common', 'Shared', {}, 3]) {
+			state.values.set('multiCoverage.comparisonMode', invalid);
+			assert.strictEqual(config.getComparisonMode(), 'combined');
+		}
+	});
+
+	test('mapping reads do not expose mutable stored objects', async () => {
+		const config = new WorkspaceConfig(new MemoryState());
+		await config.savePathMapping(mapping);
+		config.getPathMapping()!.coverageRoot = '/changed';
+		assert.deepStrictEqual(config.getPathMapping(), mapping);
+	});
+
+	test('invalid writes and storage failures are reported to the caller', async () => {
+		const state = new MemoryState();
+		const config = new WorkspaceConfig(state);
+		await config.savePathMapping(mapping);
+		await assert.rejects(config.savePathMapping({ ...mapping, coverageRoot: 'relative' }), /absolute/);
+		await assert.rejects(config.saveComparisonMode('common' as never), /Unknown/);
+		state.failWrites = true;
+		await assert.rejects(config.savePathMapping({ ...mapping, coverageRoot: '/new' }), /Storage unavailable/);
+		assert.deepStrictEqual(config.getPathMapping(), mapping);
+	});
+
+	test('coverage roots can come from POSIX or Windows environments', () => {
+		for (const root of ['/remote', '/', 'C:\\coverage', '\\\\server\\share']) {
+			assert.ok(isAbsoluteCoverageRoot(root));
+		}
+		for (const root of ['', '  ', 'relative', 'C:relative', '\\relative', '/bad\0']) {
+			assert.ok(!isAbsoluteCoverageRoot(root));
+		}
+	});
+});

@@ -1,17 +1,24 @@
 import { CoverageSource } from './types';
 
 export class CoverageStore {
-	private readonly sources = new Map<string, CoverageSource>();
+	private readonly sources = new Map<
+		string,
+		CoverageSource
+	>();
 
 	add(source: CoverageSource): void {
 		this.sources.set(source.id, source);
 	}
 
 	getAll(): CoverageSource[] {
-		return Array.from(this.sources.values());
+		return Array.from(
+			this.sources.values()
+		);
 	}
 
-	get(id: string): CoverageSource | undefined {
+	get(
+		id: string
+	): CoverageSource | undefined {
 		return this.sources.get(id);
 	}
 
@@ -35,5 +42,14 @@ export class CoverageStore {
 		}
 
 		source.enabled = !source.enabled;
+	}
+
+	setAllEnabled(enabled: boolean): void {
+		for (
+			const source
+			of this.sources.values()
+		) {
+			source.enabled = enabled;
+		}
 	}
 }

@@ -3,23 +3,44 @@ import { CoverageStore } from '../coverage/coverageStore';
 import { CoverageTreeItem } from './coverageTreeItem';
 
 export class CoverageTreeProvider
-	implements vscode.TreeDataProvider<CoverageTreeItem> {
+	implements
+		vscode.TreeDataProvider<CoverageTreeItem>,
+		vscode.Disposable {
 
-	private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<CoverageTreeItem | undefined | void>();
+	private readonly onDidChangeTreeDataEmitter =
+		new vscode.EventEmitter<
+			CoverageTreeItem | undefined | void
+		>();
 
-	readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
+	readonly onDidChangeTreeData =
+		this.onDidChangeTreeDataEmitter.event;
 
-	constructor(private readonly store: CoverageStore) {}
+	constructor(
+		private readonly store: CoverageStore
+	) {}
 
-	getTreeItem(element: CoverageTreeItem): vscode.TreeItem {
+	getTreeItem(
+		element: CoverageTreeItem
+	): vscode.TreeItem {
 		return element;
 	}
 
 	getChildren(): CoverageTreeItem[] {
-		return this.store.getAll().map(source => new CoverageTreeItem(source));
+		return this.store
+			.getAll()
+			.map(
+				source =>
+					new CoverageTreeItem(
+						source
+					)
+			);
 	}
 
 	refresh(): void {
-        this.onDidChangeTreeDataEmitter.fire();
-    }
+		this.onDidChangeTreeDataEmitter.fire();
+	}
+
+	dispose(): void {
+		this.onDidChangeTreeDataEmitter.dispose();
+	}
 }
