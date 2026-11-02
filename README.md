@@ -66,6 +66,11 @@ Coverage line `0` is ignored, and coverage line numbers are converted from
   of the selected Comparison mode. Switching files, changing mapping, or changing
   sources updates the view automatically; unmapped files clear the old statistics.
   These global totals are unchanged by focus selection.
+- **Display** independently toggles **Background Highlights** and **Coverage
+  Markers** using native checkboxes. Both start enabled. Turning both off hides
+  coverage decorations while keeping loaded data, focus, comparison, and Current
+  File counts intact. Markers still represent multi-source lines only; disabling
+  backgrounds does not create markers for lines covered by just one source.
 
 Right-click a Coverage Sources row and select **Show Only This Source** to enable
 that run and disable every other run. This does not select a focus. An existing
@@ -87,7 +92,9 @@ available in the Coverage Sources **...** menu.
 
 ## Workspace configuration
 
-Path mapping and the selected comparison mode are saved for the current workspace.
+Path mapping, the selected comparison mode, and both Display preferences are saved
+for the current workspace. Missing or malformed Display values default to enabled
+independently for each preference.
 When reopening that workspace, the Comparison view restores its selection. Load
 the coverage JSON files again to render coverage using the saved mapping; the
 mapping prompt appears only if no valid mapping is saved.
@@ -111,8 +118,8 @@ The native sidebar has independent source and comparison tree providers.
 `EditorCoverageRenderer` resolves the current file, queries raw coverage, removes
 disabled sources, and applies `comparisonFilter` before passing the same derived
 coverage to both decoration managers. Filtering never changes the stored maps.
-Additional Display views can use separate providers
-without changing parsing or mixing display options with comparison rules.
+Display preferences are applied only after comparison/focus filtering and never
+change the coverage snapshot used for statistics.
 
 ```bash
 npm install
@@ -141,6 +148,5 @@ Press `F5` in VS Code to launch the extension development host.
 ## Current limitations
 
 - Loaded coverage sources and their enabled states are session-scoped.
-- Display toggles are planned but not implemented yet.
 - Coverage is read from the aggregated JSON format where each file path maps to
   an object of covered line numbers.

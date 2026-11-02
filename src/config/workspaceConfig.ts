@@ -2,9 +2,11 @@ import type { Memento } from 'vscode';
 import * as path from 'path';
 import { ComparisonMode, DEFAULT_COMPARISON_MODE, isComparisonMode } from '../coverage/comparisonMode';
 import { PathMapping } from '../paths/pathMapping';
+import { DisplayOptions, restoreDisplayOptions } from '../editor/displayOptions';
 
 const MAPPING_KEY = 'multiCoverage.pathMapping';
 const COMPARISON_KEY = 'multiCoverage.comparisonMode';
+const DISPLAY_KEY = 'multiCoverage.displayOptions';
 
 export function isAbsoluteCoverageRoot(value: unknown): value is string {
 	return typeof value === 'string' && value.trim().length > 0 && !value.includes('\0') &&
@@ -51,5 +53,16 @@ export class WorkspaceConfig {
 			throw new Error('Unknown comparison mode.');
 		}
 		await this.state.update(COMPARISON_KEY, mode);
+	}
+
+	getDisplayOptions(): DisplayOptions {
+		return restoreDisplayOptions(this.state.get<unknown>(DISPLAY_KEY));
+	}
+
+	async saveDisplayOptions(options: DisplayOptions): Promise<void> {
+		if (typeof options.backgroundHighlights !== 'boolean' || typeof options.coverageMarkers !== 'boolean') {
+			throw new Error('Display options must be boolean values.');
+		}
+		await this.state.update(DISPLAY_KEY, { ...options });
 	}
 }

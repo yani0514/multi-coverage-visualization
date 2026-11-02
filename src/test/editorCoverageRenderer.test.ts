@@ -17,10 +17,16 @@ import { PathResolver } from '../paths/pathResolver';
 import { analyzeCurrentFile } from '../coverage/coverageAnalysis';
 import { CurrentFileTreeProvider } from '../sidebar/currentFileTreeProvider';
 import { FocusSourceSelection } from '../coverage/focusSourceSelection';
+import { DisplayOptions, DEFAULT_DISPLAY_OPTIONS } from '../editor/displayOptions';
+import { buildVisibleCoverage } from '../coverage/comparisonFilter';
 
 class RecordingBackgrounds extends DecorationManager {
 	readonly lines = new Map<string, number[]>();
-	override clear(): void { this.lines.clear(); }
+	readonly clearedEditors = new Set<string>();
+	override clear(editor: vscode.TextEditor): void {
+		this.lines.clear();
+		this.clearedEditors.add(editor.document.uri.toString());
+	}
 	override applySourceCoverage(
 		_editor: vscode.TextEditor, id: string, _color: string, lines: number[]
 	): void { this.lines.set(id, lines); }
@@ -28,7 +34,11 @@ class RecordingBackgrounds extends DecorationManager {
 
 class RecordingMarkers extends MarkerManager {
 	coverage: LineCoverage = new Map();
-	override clear(): void { this.coverage = new Map(); }
+	readonly clearedEditors = new Set<string>();
+	override clear(editor: vscode.TextEditor): void {
+		this.coverage = new Map();
+		this.clearedEditors.add(editor.document.uri.toString());
+	}
 	override applyMarkers(_editor: vscode.TextEditor, coverage: LineCoverage): void {
 		this.coverage = coverage;
 	}
@@ -71,6 +81,7 @@ suite('Editor coverage pipeline', () => {
 				store.add(source);
 			}
 			let mode: ComparisonMode = 'shared';
+			let display: DisplayOptions = { ...DEFAULT_DISPLAY_OPTIONS };
 			const focus = new FocusSourceSelection(store);
 			let mapping = { coverageRoot: '/remote', localRoot: directory };
 			const renderer = new EditorCoverageRenderer({
@@ -78,7 +89,8 @@ suite('Editor coverage pipeline', () => {
 				decorationManager: backgrounds, markerManager: markers,
 				getPathMapping: () => mapping,
 				getComparisonMode: () => mode,
-				getFocusSourceId: () => focus.getSourceId()
+				getFocusSourceId: () => focus.getSourceId(),
+				getDisplayOptions: () => display
 			});
 			for (const [filename, expected] of [
 				['edit.php', [2, 3, 5]], ['birthdays.php', [2]], ['helper.inc', [3]]
@@ -101,6 +113,35 @@ suite('Editor coverage pipeline', () => {
 				assert.deepStrictEqual(backgrounds.lines.get('B'), [...expected]);
 			}
 			await openActiveFile(path.join(directory, 'edit.php'));
+			// Every display combination must preserve selection and global statistics.
+			for (const backgroundHighlights of [true, false]) {
+				for (const coverageMarkers of [true, false]) {
+					display = { backgroundHighlights, coverageMarkers };
+					for (const focusId of [undefined, 'A', 'B']) {
+						focus.select(focusId);
+						for (const comparison of ['combined', 'shared', 'exclusive'] as const) {
+							mode = comparison;
+							const snapshot = renderer.refreshActiveEditor();
+							if (snapshot.state !== 'mapped') { assert.fail('Expected mapped snapshot'); }
+							const visible = buildVisibleCoverage(snapshot.coverage, mode, focusId);
+							const expectedMarkers = coverageMarkers ? visible : new Map();
+							assert.deepStrictEqual(markers.coverage, expectedMarkers);
+							for (const source of store.getAll()) {
+								const expected = backgroundHighlights
+									? [...visible].filter(([, sources]) => sources.some(item => item.id === source.id)).map(([line]) => line)
+									: [];
+								assert.deepStrictEqual(backgrounds.lines.get(source.id) ?? [], expected);
+							}
+							const stats = analyzeCurrentFile(snapshot);
+							if (stats.state !== 'mapped') { assert.fail('Expected mapped statistics'); }
+							assert.deepStrictEqual([stats.combined, stats.shared, stats.exclusive], [5, 3, 2]);
+							assert.deepStrictEqual(stats.sources.map(source => source.count), [4, 4]);
+							assert.strictEqual(focus.getSourceId(), focusId);
+						}
+					}
+				}
+			}
+			display = { ...DEFAULT_DISPLAY_OPTIONS };
 			focus.select('A');
 			mode = 'exclusive';
 			const focusedStats = analyzeCurrentFile(renderer.refreshActiveEditor());
@@ -171,6 +212,24 @@ suite('Editor coverage pipeline', () => {
 			if (removed.state !== 'mapped') { assert.fail('Expected mapped statistics'); }
 			assert.deepStrictEqual(removed.sources.map(item => item.id), ['A']);
 			assert.strictEqual(removed.exclusive, 4);
+			// Turning display off clears both managers in inactive split panes too.
+			const secondDocument = await vscode.workspace.openTextDocument(path.join(directory, 'birthdays.php'));
+			await vscode.window.showTextDocument(secondDocument, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
+			for (let attempt = 0; attempt < 100 && vscode.window.visibleTextEditors.length < 2; attempt++) {
+				await new Promise(resolve => setTimeout(resolve, 20));
+			}
+			assert.ok(vscode.window.visibleTextEditors.length >= 2);
+			backgrounds.clearedEditors.clear();
+			markers.clearedEditors.clear();
+			display = { backgroundHighlights: false, coverageMarkers: false };
+			const hiddenStats = analyzeCurrentFile(renderer.refreshVisibleEditors());
+			for (const editor of vscode.window.visibleTextEditors) {
+				assert.ok(backgrounds.clearedEditors.has(editor.document.uri.toString()));
+				assert.ok(markers.clearedEditors.has(editor.document.uri.toString()));
+			}
+			assert.strictEqual(backgrounds.lines.size, 0);
+			assert.strictEqual(markers.coverage.size, 0);
+			assert.strictEqual(hiddenStats.state, 'mapped');
 		} finally {
 			await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 			backgrounds.dispose();

@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as path from 'path';
 import type { Memento } from 'vscode';
 import { WorkspaceConfig, isAbsoluteCoverageRoot } from '../config/workspaceConfig';
+import { DEFAULT_DISPLAY_OPTIONS, DisplayOptions } from '../editor/displayOptions';
 
 class MemoryState implements Memento {
 	readonly values = new Map<string, unknown>();
@@ -21,6 +22,47 @@ class MemoryState implements Memento {
 }
 
 suite('Workspace configuration', () => {
+	test('display defaults are both enabled', () => {
+		assert.deepStrictEqual(new WorkspaceConfig(new MemoryState()).getDisplayOptions(), DEFAULT_DISPLAY_OPTIONS);
+	});
+
+	test('all display combinations survive manager recreation without leaking to other workspaces', async () => {
+		const state = new MemoryState();
+		for (const backgroundHighlights of [true, false]) {
+			for (const coverageMarkers of [true, false]) {
+				const options = { backgroundHighlights, coverageMarkers };
+				await new WorkspaceConfig(state).saveDisplayOptions(options);
+				assert.deepStrictEqual(new WorkspaceConfig(state).getDisplayOptions(), options);
+				assert.deepStrictEqual(new WorkspaceConfig(new MemoryState()).getDisplayOptions(), DEFAULT_DISPLAY_OPTIONS);
+			}
+		}
+	});
+
+	test('malformed display values fall back per preference without treating false as missing', () => {
+		const state = new MemoryState();
+		const config = new WorkspaceConfig(state);
+		for (const invalid of [null, [], 'false', 0, {}, { backgroundHighlights: 'false', coverageMarkers: 0 }]) {
+			state.values.set('multiCoverage.displayOptions', invalid);
+			assert.deepStrictEqual(config.getDisplayOptions(), DEFAULT_DISPLAY_OPTIONS);
+		}
+		state.values.set('multiCoverage.displayOptions', { backgroundHighlights: false, coverageMarkers: 'bad' });
+		assert.deepStrictEqual(config.getDisplayOptions(), { backgroundHighlights: false, coverageMarkers: true });
+		state.values.set('multiCoverage.displayOptions', { coverageMarkers: false });
+		assert.deepStrictEqual(config.getDisplayOptions(), { backgroundHighlights: true, coverageMarkers: false });
+	});
+
+	test('display reads return copies and invalid writes or failed storage are rejected', async () => {
+		const state = new MemoryState();
+		const config = new WorkspaceConfig(state);
+		await config.saveDisplayOptions({ backgroundHighlights: false, coverageMarkers: false });
+		config.getDisplayOptions().backgroundHighlights = true;
+		assert.strictEqual(config.getDisplayOptions().backgroundHighlights, false);
+		await assert.rejects(config.saveDisplayOptions({ backgroundHighlights: 'false', coverageMarkers: true } as unknown as DisplayOptions), /boolean/);
+		state.failWrites = true;
+		await assert.rejects(config.saveDisplayOptions({ ...DEFAULT_DISPLAY_OPTIONS }), /Storage unavailable/);
+		assert.deepStrictEqual(config.getDisplayOptions(), { backgroundHighlights: false, coverageMarkers: false });
+	});
+
 	const mapping = { coverageRoot: '/remote/project', localRoot: path.resolve('local-project') };
 
 	test('missing state uses no mapping and Combined', () => {

@@ -14,6 +14,10 @@
   "contributes": {
     "commands": [
       {
+        "command": "multi-coverage-visualization.toggleDisplayOption",
+        "title": "Multi Coverage: Toggle Display Option"
+      },
+      {
         "command": "multi-coverage-visualization.setFocusSource",
         "title": "Multi Coverage: Set Focus Source"
       },
@@ -85,6 +89,11 @@
           "id": "multiCoverage.currentFile",
           "name": "Current File",
           "icon": "resources/icon.svg"
+        },
+        {
+          "id": "multiCoverage.display",
+          "name": "Display",
+          "icon": "resources/icon.svg"
         }
       ]
     },
@@ -96,6 +105,10 @@
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "multi-coverage-visualization.toggleDisplayOption",
+          "when": "false"
+        },
         {
           "command": "multi-coverage-visualization.setFocusSource",
           "when": "false"

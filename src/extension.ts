@@ -26,6 +26,8 @@ import { CurrentFileTreeProvider } from './sidebar/currentFileTreeProvider';
 import { analyzeCurrentFile } from './coverage/coverageAnalysis';
 import { FocusSourceSelection } from './coverage/focusSourceSelection';
 import { FocusSourceTreeProvider } from './sidebar/focusSourceTreeProvider';
+import { DisplayTreeProvider } from './sidebar/displayTreeProvider';
+import { DisplayOptionKey, isDisplayOptionKey } from './editor/displayOptions';
 
 export function activate(
 	context: vscode.ExtensionContext
@@ -52,6 +54,7 @@ export function activate(
 		new ComparisonTreeProvider(workspaceConfig.getComparisonMode());
 	const currentFileTreeProvider = new CurrentFileTreeProvider();
 	const focusSourceTreeProvider = new FocusSourceTreeProvider();
+	const displayTreeProvider = new DisplayTreeProvider(workspaceConfig.getDisplayOptions());
 
 	let pathMapping = workspaceConfig.getPathMapping();
 
@@ -66,7 +69,8 @@ export function activate(
 				pathMapping,
 			getComparisonMode: () =>
 				comparisonTreeProvider.getMode(),
-			getFocusSourceId: () => focusSelection.getSourceId()
+			getFocusSourceId: () => focusSelection.getSourceId(),
+			getDisplayOptions: () => displayTreeProvider.getOptions()
 		});
 
 	const coverageTreeView =
@@ -100,17 +104,21 @@ export function activate(
 	const focusSourceTreeView = vscode.window.createTreeView('multiCoverage.focusSource', {
 		treeDataProvider: focusSourceTreeProvider
 	});
+	const displayTreeView = vscode.window.createTreeView('multiCoverage.display', {
+		treeDataProvider: displayTreeProvider,
+		manageCheckboxStateManually: true
+	});
 
 	const refreshSources = () => {
 		coverageTreeProvider.refresh();
 		updateSourceContext();
 	};
 
-	const refreshVisualization = () => {
+	const refreshVisualization = (allVisible = false) => {
 		const focusId = focusSelection.getSourceId();
 		focusSourceTreeProvider.update(store.getAll(), focusId);
 		comparisonTreeProvider.setFocusSource(focusId);
-		const snapshot = renderer.refreshActiveEditor();
+		const snapshot = allVisible ? renderer.refreshVisibleEditors() : renderer.refreshActiveEditor();
 		currentFileTreeProvider.update(analyzeCurrentFile(snapshot));
 	};
 
@@ -358,6 +366,25 @@ export function activate(
 		}
 	);
 
+	const updateDisplay = async (key: DisplayOptionKey, enabled: boolean) => {
+		displayTreeProvider.setOption(key, enabled);
+		refreshVisualization(true);
+		const options = displayTreeProvider.getOptions();
+		await persistConfiguration(() => workspaceConfig.saveDisplayOptions(options));
+	};
+	const toggleDisplayCommand = vscode.commands.registerCommand(
+		'multi-coverage-visualization.toggleDisplayOption',
+		(key: unknown) => {
+			if (!isDisplayOptionKey(key)) { return; }
+			return updateDisplay(key, !displayTreeProvider.getOptions()[key]);
+		}
+	);
+	const displayCheckboxListener = displayTreeView.onDidChangeCheckboxState(async event => {
+		for (const [item, state] of event.items) {
+			await updateDisplay(item.option, state === vscode.TreeItemCheckboxState.Checked);
+		}
+	});
+
 	/*
 	 * Automatically refresh coverage when
 	 * the user switches editor tabs/files.
@@ -368,6 +395,9 @@ export function activate(
 				refreshVisualization();
 			}
 		);
+	const visibleEditorsListener = vscode.window.onDidChangeVisibleTextEditors(() => {
+		refreshVisualization(true);
+	});
 
 	context.subscriptions.push(
 		configureMappingCommand,
@@ -379,7 +409,12 @@ export function activate(
 		setComparisonModeCommand,
 		setFocusSourceCommand,
 		showOnlySourceCommand,
+		toggleDisplayCommand,
+		displayCheckboxListener,
+		displayTreeView,
+		displayTreeProvider,
 		editorChangeListener,
+		visibleEditorsListener,
 		coverageTreeView,
 		comparisonTreeView,
 		currentFileTreeView,

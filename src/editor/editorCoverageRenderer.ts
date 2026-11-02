@@ -15,6 +15,7 @@ import { PathResolver } from '../paths/pathResolver';
 
 import { DecorationManager } from './decorationManager';
 import { MarkerManager } from './markerManager';
+import { DisplayOptions, DEFAULT_DISPLAY_OPTIONS } from './displayOptions';
 
 export interface EditorCoverageRendererOptions {
 	readonly store: CoverageStore;
@@ -28,6 +29,7 @@ export interface EditorCoverageRendererOptions {
 	readonly getComparisonMode: () =>
 		ComparisonMode;
 	readonly getFocusSourceId?: () => string | undefined;
+	readonly getDisplayOptions?: () => DisplayOptions;
 }
 
 export class EditorCoverageRenderer {
@@ -36,9 +38,19 @@ export class EditorCoverageRenderer {
 	) {}
 
 	refreshActiveEditor(): CurrentFileCoverage {
-		const editor =
-			vscode.window.activeTextEditor;
+		return this.refreshEditor(vscode.window.activeTextEditor);
+	}
 
+	/** Workspace display preferences also apply to inactive split editor panes. */
+	refreshVisibleEditors(): CurrentFileCoverage {
+		const active = vscode.window.activeTextEditor;
+		for (const editor of vscode.window.visibleTextEditors) {
+			if (editor !== active) { this.refreshEditor(editor); }
+		}
+		return this.refreshEditor(active);
+	}
+
+	private refreshEditor(editor: vscode.TextEditor | undefined): CurrentFileCoverage {
 		if (!editor) {
 			return { state: 'no-editor' };
 		}
@@ -81,15 +93,13 @@ export class EditorCoverageRenderer {
 				this.options.getFocusSourceId?.()
 			);
 
-		this.applyBackgroundHighlights(
-			editor,
-			visibleCoverage
-		);
-
-		this.options.markerManager.applyMarkers(
-			editor,
-			visibleCoverage
-		);
+		const display = this.options.getDisplayOptions?.() ?? DEFAULT_DISPLAY_OPTIONS;
+		if (display.backgroundHighlights) {
+			this.applyBackgroundHighlights(editor, visibleCoverage);
+		}
+		if (display.coverageMarkers) {
+			this.options.markerManager.applyMarkers(editor, visibleCoverage);
+		}
 		return {
 			state: 'mapped', localPath, coveragePath: matchedCoveragePath,
 			coverage: fileCoverage, sources: this.options.store.getAll()
