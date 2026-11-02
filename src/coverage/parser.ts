@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import { FileCoverage } from './types';
+import { normalizeCoveragePath } from '../paths/pathNormalization';
 
 export async function parseCoverageFile(
 	filePath: string
@@ -13,7 +14,8 @@ export async function parseCoverageFile(
 	const result: FileCoverage = new Map();
 
 	for (const [sourcePath, lines] of Object.entries(raw)) {
-		const coveredLines = new Set<number>();
+		const canonicalPath = normalizeCoveragePath(sourcePath);
+		const coveredLines = result.get(canonicalPath) ?? new Set<number>();
 		if (!isRecord(lines)) {
 			throw new Error(`Invalid coverage for "${sourcePath}": expected a covered line object.`);
 		}
@@ -25,7 +27,7 @@ export async function parseCoverageFile(
 			coveredLines.add(parsedLine);
 		}
 
-		result.set(sourcePath, coveredLines);
+		result.set(canonicalPath, coveredLines);
 	}
 
 	return result;

@@ -59,6 +59,60 @@ async function openActiveFile(filename: string): Promise<void> {
 }
 
 suite('Editor coverage pipeline', () => {
+	test('virtual documents sharing a mapped fsPath do not receive coverage or stale statistics', async function () {
+		this.timeout(10000);
+		const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'coverage-virtual-'));
+		const filename = path.join(directory, 'edit.php');
+		const backgrounds = new RecordingBackgrounds();
+		const markers = new RecordingMarkers();
+		const virtualProvider = vscode.workspace.registerTextDocumentContentProvider('coverage-audit', {
+			provideTextDocumentContent: () => 'virtual source\n'
+		});
+		try {
+			await fs.writeFile(filename, 'real source\n');
+			const store = new CoverageStore();
+			store.add({
+				id: 'A', name: 'A.json', filePath: path.join(directory, 'A.json'),
+				color: 'rgba(29, 78, 216, 0.20)', enabled: true,
+				coverage: new Map([['/remote/edit.php', new Set([1])]])
+			});
+			const mapping = { coverageRoot: '/remote', localRoot: directory };
+			const pathResolver = new PathResolver();
+			const renderer = new EditorCoverageRenderer({
+				store, query: new CoverageQuery(store), pathResolver,
+				decorationManager: backgrounds, markerManager: markers,
+				getPathMapping: () => mapping, getComparisonMode: () => 'combined'
+			});
+			await openActiveFile(filename);
+			assert.strictEqual(renderer.refreshActiveEditor().state, 'mapped');
+			assert.deepStrictEqual(backgrounds.lines.get('A'), [1]);
+			const virtualUri = vscode.Uri.file(filename).with({ scheme: 'coverage-audit' });
+			assert.strictEqual(pathResolver.resolveCoveragePath(virtualUri.fsPath, ['/remote/edit.php'], mapping), '/remote/edit.php');
+			const virtual = await vscode.workspace.openTextDocument(virtualUri);
+			await vscode.window.showTextDocument(virtual);
+			for (let attempt = 0; attempt < 100 && vscode.window.activeTextEditor?.document !== virtual; attempt++) {
+				await new Promise(resolve => setTimeout(resolve, 20));
+			}
+			assert.strictEqual(vscode.window.activeTextEditor?.document, virtual);
+			const snapshot = renderer.refreshActiveEditor();
+			assert.strictEqual(snapshot.state, 'unmapped');
+			assert.strictEqual(analyzeCurrentFile(snapshot).state, 'unmapped');
+			assert.strictEqual(backgrounds.lines.size, 0);
+			assert.strictEqual(markers.coverage.size, 0);
+			await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+			for (let attempt = 0; attempt < 100 && vscode.window.activeTextEditor; attempt++) {
+				await new Promise(resolve => setTimeout(resolve, 20));
+			}
+			assert.deepStrictEqual(renderer.refreshActiveEditor(), { state: 'no-editor' });
+		} finally {
+			await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+			virtualProvider.dispose();
+			backgrounds.dispose();
+			markers.dispose();
+			await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+		}
+	});
+
 	test('comparison and source state survive switching mapped PHP and INC files', async function () {
 		this.timeout(15000);
 		const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'multi-coverage-'));

@@ -159,7 +159,17 @@ npm run check-types
 npm run lint
 npm run compile
 npm test
+npm run test:unit
 ```
+
+### Algorithmic benchmark
+
+Run `npm run benchmark` for deterministic small, medium, and large synthetic
+coverage datasets. It reports median timings after 3 warmups and 20 repetitions,
+including parsing one JSON run, queries, comparisons, statistics, and equivalent
+pure marker grouping. It does not measure VS Code rendering or FPS. Temporary
+datasets are cleaned automatically; benchmark tooling is excluded from the VSIX.
+For a quick run use `npm run benchmark -- --scale=small`.
 
 Press `F5` in VS Code to launch the extension development host.
 

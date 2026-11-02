@@ -1,5 +1,6 @@
 import * as path from 'path';
 import { PathMapping } from './pathMapping';
+import { normalizeCoveragePath } from './pathNormalization';
 
 export class PathResolver {
 	resolveLocalPath(
@@ -43,27 +44,35 @@ export class PathResolver {
 			.slice(normalizedLocalRoot.length)
 			.replace(/^\/+/, '');
 
+		const coverageRoot = this.normalize(mapping.coverageRoot);
 		const expectedCoveragePath = this.normalize(
-			`${mapping.coverageRoot}/${relativePath}`
+			`${coverageRoot}${coverageRoot.endsWith('/') ? '' : '/'}${relativePath}`
 		);
 
+		let match: string | undefined;
 		for (const coveragePath of coveragePaths) {
-			if (this.normalize(coveragePath) === expectedCoveragePath) {
-				return coveragePath;
+			const candidate = this.normalize(coveragePath);
+			// Keep the generated coverage root case-sensitive. Only the local
+			// relative path is case-insensitive on Windows, including UNC paths.
+			const matches = candidate === expectedCoveragePath || (windowsPath &&
+				this.isWithinRoot(candidate, coverageRoot) &&
+				candidate.slice(coverageRoot.length).replace(/^\/+/, '').toLowerCase() === relativePath.toLowerCase());
+			if (matches) {
+				// A Windows checkout cannot distinguish two POSIX files differing
+				// only by case. Do not pick a coverage file arbitrarily.
+				if (match !== undefined && this.normalize(match) !== candidate) { return undefined; }
+				match = coveragePath;
 			}
 		}
 
-		return undefined;
+		return match;
 	}
 
 	private isWithinRoot(filePath: string, root: string): boolean {
-		return filePath === root || filePath.startsWith(`${root}/`);
+		return filePath === root || filePath.startsWith(root.endsWith('/') ? root : `${root}/`);
 	}
 
 	private normalize(filePath: string): string {
-		return filePath
-			.replace(/\\/g, '/')
-			.replace(/\/+/g, '/')
-			.replace(/\/$/, '');
+		return normalizeCoveragePath(filePath);
 	}
 }

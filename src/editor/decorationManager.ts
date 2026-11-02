@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 
 export class DecorationManager {
+	constructor(
+		private readonly createDecoration = vscode.window.createTextEditorDecorationType
+	) {}
+
 	private readonly decorations =
 		new Map<string, vscode.TextEditorDecorationType>();
 
@@ -14,7 +18,7 @@ export class DecorationManager {
 
 		if (!decoration) {
 			decoration =
-				vscode.window.createTextEditorDecorationType({
+				this.createDecoration({
 					backgroundColor: color
 				});
 
@@ -27,7 +31,7 @@ export class DecorationManager {
 		const ranges: vscode.Range[] = [];
 
 		for (const coverageLine of coveredLines) {
-			if (coverageLine <= 0) {
+			if (!Number.isSafeInteger(coverageLine) || coverageLine <= 0) {
 				continue;
 			}
 
@@ -63,6 +67,17 @@ export class DecorationManager {
 				decoration,
 				[]
 			);
+		}
+	}
+
+	/** Disposing removes this type from every editor, including hidden documents. */
+	retainSources(sourceIds: readonly string[]): void {
+		const retained = new Set(sourceIds);
+		for (const [id, decoration] of this.decorations) {
+			if (!retained.has(id)) {
+				decoration.dispose();
+				this.decorations.delete(id);
+			}
 		}
 	}
 

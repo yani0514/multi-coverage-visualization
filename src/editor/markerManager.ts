@@ -2,8 +2,17 @@ import * as vscode from 'vscode';
 import { CoverageSource } from '../coverage/types';
 
 export class MarkerManager {
+	private static readonly historicalCacheLimit = 256;
+	private readonly editorCombinations = new WeakMap<vscode.TextEditor, Set<string>>();
+	constructor(
+		private readonly createDecoration = vscode.window.createTextEditorDecorationType
+	) {}
+
 	private readonly decorations =
-		new Map<string, vscode.TextEditorDecorationType>();
+		new Map<string, {
+			decoration: vscode.TextEditorDecorationType;
+			sourceIds: readonly string[];
+		}>();
 
 	applyMarkers(
 		editor: vscode.TextEditor,
@@ -17,8 +26,12 @@ export class MarkerManager {
 				{
 					sources: CoverageSource[];
 					options: vscode.DecorationOptions[];
+					hover: vscode.MarkdownString;
 				}
 			>();
+		// CoverageQuery emits the same contributor order on many lines. Sort each
+		// ordered sequence once per refresh, while retaining canonical grouping.
+		const combinations = new Map<string, { key: string; sources: CoverageSource[] }>();
 
 		for (const [lineNumber, sources] of fileCoverage) {
 			// Markers are only needed for overlapping coverage.
@@ -26,7 +39,7 @@ export class MarkerManager {
 				continue;
 			}
 
-			if (lineNumber <= 0) {
+			if (!Number.isSafeInteger(lineNumber) || lineNumber <= 0) {
 				continue;
 			}
 
@@ -42,14 +55,15 @@ export class MarkerManager {
 			const line =
 				editor.document.lineAt(editorLine);
 
-			const sortedSources = [...sources].sort(
-				(a, b) => a.id.localeCompare(b.id)
-			);
-
-			const combinationKey =
-				sortedSources
-					.map(source => source.id)
-					.join('|');
+			const orderedKey = JSON.stringify(sources.map(source => source.id));
+			let combination = combinations.get(orderedKey);
+			if (!combination) {
+				const sorted = [...sources].sort((a, b) => a.id.localeCompare(b.id));
+				combination = { key: JSON.stringify(sorted.map(source => source.id)), sources: sorted };
+				combinations.set(orderedKey, combination);
+			}
+			const sortedSources = combination.sources;
+			const combinationKey = combination.key;
 
 			let group =
 				groupedMarkers.get(combinationKey);
@@ -57,7 +71,8 @@ export class MarkerManager {
 			if (!group) {
 				group = {
 					sources: sortedSources,
-					options: []
+					options: [],
+					hover: this.createHoverMessage(sortedSources)
 				};
 
 				groupedMarkers.set(
@@ -66,20 +81,18 @@ export class MarkerManager {
 				);
 			}
 
-			const hoverMessage =
-				this.createHoverMessage(sortedSources);
-
 			group.options.push({
 				range: new vscode.Range(
 					line.range.end,
 					line.range.end
 				),
-				hoverMessage
+				hoverMessage: group.hover
 			});
 		}
 
 		// Apply each coverage combination ONCE
 		// with all matching lines.
+		this.editorCombinations.set(editor, new Set(groupedMarkers.keys()));
 		for (
 			const [key, group]
 			of groupedMarkers
@@ -95,6 +108,7 @@ export class MarkerManager {
 				group.options
 			);
 		}
+		this.pruneHistoricalCombinations(editor);
 	}
 
 	private getOrCreateDecoration(
@@ -105,7 +119,10 @@ export class MarkerManager {
 			this.decorations.get(key);
 
 		if (existing) {
-			return existing;
+			// Move a reused entry to the end for least-recently-used pruning.
+			this.decorations.delete(key);
+			this.decorations.set(key, existing);
+			return existing.decoration;
 		}
 
 		const svg =
@@ -120,7 +137,7 @@ export class MarkerManager {
 			);
 
 		const decoration =
-			vscode.window.createTextEditorDecorationType({
+			this.createDecoration({
 				after: {
 					contentIconPath: iconUri,
 					margin: '0 0 0 0.45em',
@@ -131,7 +148,7 @@ export class MarkerManager {
 
 		this.decorations.set(
 			key,
-			decoration
+			{ decoration, sourceIds: sources.map(source => source.id) }
 		);
 
 		return decoration;
@@ -205,9 +222,9 @@ export class MarkerManager {
 		);
 
 		for (const source of sources) {
-			markdown.appendMarkdown(
-				`- **${source.name}**\n`
-			);
+			markdown.appendMarkdown('- ');
+			markdown.appendText(source.name);
+			markdown.appendMarkdown('\n');
 		}
 
 		return markdown;
@@ -225,20 +242,53 @@ export class MarkerManager {
 	clear(
 		editor: vscode.TextEditor
 	): void {
-		for (
-			const decoration
-			of this.decorations.values()
-		) {
-			editor.setDecorations(
-				decoration,
-				[]
-			);
+		const keys = this.editorCombinations.get(editor);
+		this.editorCombinations.delete(editor);
+		for (const key of keys ?? []) {
+			const entry = this.decorations.get(key);
+			if (entry) { editor.setDecorations(entry.decoration, []); }
+		}
+	}
+
+	/** Also called after display-off/closed-editor refreshes, where no markers apply. */
+	pruneUnusedCombinations(): void {
+		this.pruneHistoricalCombinations(vscode.window.activeTextEditor);
+	}
+
+	private pruneHistoricalCombinations(currentEditor?: vscode.TextEditor): void {
+		if (this.decorations.size <= MarkerManager.historicalCacheLimit) {
+			return;
+		}
+		const visibleKeys = new Set<string>();
+		const editors = currentEditor ? [...vscode.window.visibleTextEditors, currentEditor] : vscode.window.visibleTextEditors;
+		for (const editor of editors) {
+			for (const key of this.editorCombinations.get(editor) ?? []) {
+				visibleKeys.add(key);
+			}
+		}
+		for (const [key, entry] of this.decorations) {
+			if (this.decorations.size <= MarkerManager.historicalCacheLimit) { break; }
+			if (!visibleKeys.has(key)) {
+				entry.decoration.dispose();
+				this.decorations.delete(key);
+			}
+		}
+	}
+
+	/** Retain reusable combinations only while all their sources are still loaded. */
+	retainSources(sourceIds: readonly string[]): void {
+		const retained = new Set(sourceIds);
+		for (const [key, entry] of this.decorations) {
+			if (entry.sourceIds.some(id => !retained.has(id))) {
+				entry.decoration.dispose();
+				this.decorations.delete(key);
+			}
 		}
 	}
 
 	dispose(): void {
 		for (
-			const decoration
+			const { decoration }
 			of this.decorations.values()
 		) {
 			decoration.dispose();

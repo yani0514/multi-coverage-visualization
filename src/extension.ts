@@ -20,7 +20,7 @@ import { MarkerManager } from './editor/markerManager';
 import { EditorCoverageRenderer } from './editor/editorCoverageRenderer';
 
 import { CoverageTreeProvider } from './sidebar/coverageTreeProvider';
-import { CoverageTreeItem } from './sidebar/coverageTreeItem';
+import { getCoverageSourceId } from './sidebar/coverageSourceArgument';
 import { ComparisonTreeProvider } from './sidebar/comparisonTreeProvider';
 import { CurrentFileTreeProvider } from './sidebar/currentFileTreeProvider';
 import { analyzeCurrentFile } from './coverage/coverageAnalysis';
@@ -119,6 +119,9 @@ export function activate(
 	});
 
 	const refreshSources = () => {
+		const sourceIds = store.getAll().map(source => source.id);
+		decorationManager.retainSources(sourceIds);
+		markerManager.retainSources(sourceIds);
 		coverageTreeProvider.refresh();
 		updateSourceContext();
 	};
@@ -294,7 +297,9 @@ export function activate(
 	const toggleCoverageSourceCommand =
 		vscode.commands.registerCommand(
 			'multi-coverage-visualization.toggleCoverageSource',
-			(sourceId: string) => {
+			(argument: unknown) => {
+				const sourceId = getCoverageSourceId(argument);
+				if (sourceId === undefined) { return; }
 				store.toggle(sourceId);
 
 				refreshSourcesAndVisualization();
@@ -330,10 +335,9 @@ export function activate(
 	const removeCoverageSourceCommand =
 		vscode.commands.registerCommand(
 			'multi-coverage-visualization.removeCoverageSource',
-			(item: CoverageTreeItem | string) => {
-				const sourceId = typeof item === 'string'
-					? item
-					: item.source.id;
+			(argument: unknown) => {
+				const sourceId = getCoverageSourceId(argument);
+				if (sourceId === undefined) { return; }
 				store.remove(sourceId);
 
 				refreshSourcesAndVisualization();
@@ -373,9 +377,9 @@ export function activate(
 	);
 	const showOnlySourceCommand = vscode.commands.registerCommand(
 		'multi-coverage-visualization.showOnlyCoverageSource',
-		(item: CoverageTreeItem | string) => {
-			const sourceId = typeof item === 'string' ? item : item?.source.id;
-			if (typeof sourceId !== 'string') { return; }
+		(argument: unknown) => {
+			const sourceId = getCoverageSourceId(argument);
+			if (sourceId === undefined) { return; }
 			store.enableOnly(sourceId);
 			refreshSourcesAndVisualization();
 		}

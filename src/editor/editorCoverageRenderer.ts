@@ -40,7 +40,9 @@ export class EditorCoverageRenderer {
 	) {}
 
 	refreshActiveEditor(): CurrentFileCoverage {
-		return this.refreshEditor(vscode.window.activeTextEditor);
+		const snapshot = this.refreshEditor(vscode.window.activeTextEditor);
+		this.options.markerManager.pruneUnusedCombinations();
+		return snapshot;
 	}
 
 	/** Workspace display preferences also apply to inactive split editor panes. */
@@ -49,7 +51,9 @@ export class EditorCoverageRenderer {
 		for (const editor of vscode.window.visibleTextEditors) {
 			if (editor !== active) { this.refreshEditor(editor); }
 		}
-		return this.refreshEditor(active);
+		const snapshot = this.refreshEditor(active);
+		this.options.markerManager.pruneUnusedCombinations();
+		return snapshot;
 	}
 
 	private refreshEditor(editor: vscode.TextEditor | undefined): CurrentFileCoverage {
@@ -68,7 +72,7 @@ export class EditorCoverageRenderer {
 			this.options.getPathMapping();
 		const localPath = editor.document.uri.fsPath;
 
-		if (!pathMapping) {
+		if (!pathMapping || editor.document.uri.scheme !== 'file') {
 			return { state: 'unmapped', localPath };
 		}
 
