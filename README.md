@@ -50,8 +50,7 @@ Coverage line `0` is ignored, and coverage line numbers are converted from
   source for **Show Only This Source**, **Focus This Source** (enabled runs only),
   or **Remove Source**. The view toolbar provides Load, Enable All, and Disable All;
   path configuration remains in the **...** menu. Source icons and marker dots
-  have light/dark outlines so their shape remains visible across themes. Source
-  colors and background opacity are unchanged.
+  use their original source colors and appearance.
 - **Comparison** selects which lines are visible. The selected mode applies to
   both background highlights and overlap markers.
 - **Focus Source** selects one enabled run or **None**. With a focus, Comparison

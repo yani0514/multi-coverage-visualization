@@ -38,6 +38,35 @@ function source(id: string, name = id): CoverageSource {
 }
 
 suite('Decoration lifecycle and actual manager behavior', () => {
+	test('exclusive single-owner markers reuse SVG colors, hover, clearing and pruning', () => {
+		const renders: vscode.DecorationRenderOptions[] = [];
+		const factory = decorationFactory();
+		const manager = new MarkerManager(options => { renders.push(options); return factory.create(options); });
+		const fixture = editorFixture();
+		const a = { ...source('A', 'A.json'), color: 'rgba(0,0,255,0.20)' };
+		const b = { ...source('B', 'B.json'), color: 'rgba(255,255,0,0.20)' };
+		const coverage = new Map([[1, [a]], [2, [b]], [3, []]]);
+		manager.applyMarkers(fixture.editor, coverage);
+		assert.strictEqual(renders.length, 0);
+		manager.applyMarkers(fixture.editor, coverage, { showSingleSourceMarkers: true });
+		const applied = fixture.calls.filter(call => call.ranges.length);
+		assert.strictEqual(applied.length, 2);
+		for (const [index, owner] of [a, b].entries()) {
+			const uri = renders[index].after!.contentIconPath as vscode.Uri;
+			const svg = decodeURIComponent(uri.toString());
+			assert.strictEqual((svg.match(/<circle/g) ?? []).length, 1);
+			assert.ok(svg.includes(index === 0 ? 'rgb(0,0,255)' : 'rgb(255,255,0)'));
+			const options = applied[index].ranges[0] as vscode.DecorationOptions;
+			assert.strictEqual(options.range.start.line, index);
+			assert.ok((options.hoverMessage as vscode.MarkdownString).value.includes(owner.name));
+		}
+		fixture.calls.length = 0;
+		manager.applyMarkers(fixture.editor, coverage);
+		assert.ok(fixture.calls.every(call => call.ranges.length === 0));
+		manager.retainSources([]);
+		assert.ok(factory.entries.every(entry => entry.disposals === 1));
+		manager.dispose();
+	});
 	test('background cache reuse, bounds checks, clear, pruning, and disposal have distinct effects', () => {
 		const factory = decorationFactory();
 		const manager = new DecorationManager(factory.create);

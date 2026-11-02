@@ -48,7 +48,7 @@ export class CurrentFileTreeProvider implements vscode.TreeDataProvider<CurrentF
 		});
 		const aggregateRows = COMPARISON_MODES.map(info => {
 			const item = new CurrentFileTreeItem(`count:${info.mode}`, info.label, lineCount(stats[info.mode]));
-			item.tooltip = `${info.description}\nCounts positive coverage lines, including lines beyond the editor length.`;
+			item.tooltip = `${info.description}\nGlobal total across enabled sources, independent of the selected analysis. Counts positive data lines, including lines beyond the editor length.`;
 			return item;
 		});
 		return [file, ...sourceRows, ...aggregateRows];

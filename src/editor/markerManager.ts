@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import { CoverageSource } from '../coverage/types';
 
+export interface MarkerOptions {
+	readonly showSingleSourceMarkers?: boolean;
+}
+
 export class MarkerManager {
 	private static readonly historicalCacheLimit = 256;
 	private readonly editorCombinations = new WeakMap<vscode.TextEditor, Set<string>>();
@@ -16,7 +20,8 @@ export class MarkerManager {
 
 	applyMarkers(
 		editor: vscode.TextEditor,
-		fileCoverage: Map<number, CoverageSource[]>
+		fileCoverage: Map<number, CoverageSource[]>,
+		options: MarkerOptions = {}
 	): void {
 		this.clear(editor);
 
@@ -34,8 +39,8 @@ export class MarkerManager {
 		const combinations = new Map<string, { key: string; sources: CoverageSource[] }>();
 
 		for (const [lineNumber, sources] of fileCoverage) {
-			// Markers are only needed for overlapping coverage.
-			if (sources.length <= 1) {
+			// Exclusive comparison also uses markers to identify the sole owner.
+			if (sources.length === 0 || (sources.length === 1 && !options.showSingleSourceMarkers)) {
 				continue;
 			}
 
@@ -177,14 +182,11 @@ export class MarkerManager {
 						);
 
 					return `
-						<circle cx="${cx}" cy="5" r="3" fill="#ffffff"/>
 						<circle
 							cx="${cx}"
 							cy="5"
-							r="2.4"
+							r="3"
 							fill="${color}"
-							stroke="#202020"
-							stroke-width="0.6"
 						/>
 					`;
 				})

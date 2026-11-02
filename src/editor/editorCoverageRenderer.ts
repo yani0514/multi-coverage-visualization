@@ -92,20 +92,26 @@ export class EditorCoverageRenderer {
 				matchedCoveragePath
 			);
 
+		const focusSourceId = this.options.getFocusSourceId?.();
+		const advanced = this.options.getAdvancedSelection?.() ?? { kind: 'standard' };
+		const mode = this.options.getComparisonMode();
 		const visibleCoverage =
 			buildVisibleCoverage(
 				fileCoverage,
-				this.options.getComparisonMode(),
-				this.options.getFocusSourceId?.(),
-				this.options.getAdvancedSelection?.()
+				mode,
+				focusSourceId,
+				advanced
 			);
 
 		const display = this.options.getDisplayOptions?.() ?? DEFAULT_DISPLAY_OPTIONS;
 		if (display.backgroundHighlights) {
-			this.applyBackgroundHighlights(editor, visibleCoverage);
+			this.applyBackgroundHighlights(editor, visibleCoverage,
+				advanced.kind === 'standard' ? focusSourceId : undefined);
 		}
 		if (display.coverageMarkers) {
-			this.options.markerManager.applyMarkers(editor, visibleCoverage);
+			this.options.markerManager.applyMarkers(editor, visibleCoverage, {
+				showSingleSourceMarkers: advanced.kind === 'standard' && mode === 'exclusive'
+			});
 		}
 		return {
 			state: 'mapped', localPath, coveragePath: matchedCoveragePath,
@@ -127,8 +133,21 @@ export class EditorCoverageRenderer {
 
 	private applyBackgroundHighlights(
 		editor: vscode.TextEditor,
-		fileCoverage: LineCoverage
+		fileCoverage: LineCoverage,
+		focusSourceId?: string
 	): void {
+		// Focus controls color only; keep the full contributor lists for markers.
+		if (focusSourceId !== undefined) {
+			const source = this.options.store.get(focusSourceId);
+			if (!source?.enabled) { return; }
+			const lines = [...fileCoverage]
+				.filter(([, sources]) => sources.some(item => item.id === focusSourceId))
+				.map(([line]) => line);
+			if (lines.length > 0) {
+				this.options.decorationManager.applySourceCoverage(editor, source.id, source.color, lines);
+			}
+			return;
+		}
 		const linesBySource =
 			new Map<
 				string,

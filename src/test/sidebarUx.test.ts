@@ -11,13 +11,65 @@ import { CurrentFileTreeItem } from '../sidebar/currentFileTreeItem';
 import { CoverageStore } from '../coverage/coverageStore';
 import { CoverageSource } from '../coverage/types';
 import { MarkerManager } from '../editor/markerManager';
+import { FocusSourceTreeProvider } from '../sidebar/focusSourceTreeProvider';
+import { CurrentFileTreeProvider } from '../sidebar/currentFileTreeProvider';
 
 function source(enabled = true): CoverageSource {
 	return { id: '/runs/run.json', name: 'long-測試-coverage-run.json', filePath: '/runs/run.json', color: 'rgba(234, 179, 8, 0.20)', enabled, coverage: new Map() };
 }
 
 suite('Sidebar UX and accessibility', () => {
-	test('marker SVGs retain source hue and add contrast outlines without changing grouping', () => {
+	for (const count of [2, 3, 4, 12, 20]) {
+		test(`${count}-source marker groups fit their declared width on blank lines and retain every hover name`, () => {
+			let svg = '';
+			let width = '';
+			let options: readonly vscode.DecorationOptions[] = [];
+			const manager = new MarkerManager(configuration => {
+				svg = decodeURIComponent((configuration.after!.contentIconPath as vscode.Uri).toString());
+				width = String(configuration.after!.width);
+				return { key: 'layout', dispose: () => {} };
+			});
+			const contributors = Array.from({ length: count }, (_, index) => ({ ...source(), id: `run-${index}`, name: `source-${index}.json` }));
+			const editor = {
+				document: { lineCount: 1, lineAt: () => ({ range: new vscode.Range(0, 0, 0, 0) }) },
+				setDecorations: (_type: vscode.TextEditorDecorationType, ranges: readonly vscode.DecorationOptions[]) => { if (ranges.length) { options = ranges; } }
+			} as unknown as vscode.TextEditor;
+			try {
+				manager.applyMarkers(editor, new Map([[1, contributors]]));
+				const expectedWidth = count * 6 + (count - 1) * 2;
+				assert.strictEqual(width, `${expectedWidth}px`);
+				assert.ok(svg.includes(`viewBox="0 0 ${expectedWidth} 10"`));
+				const centers = [...svg.matchAll(/cx="([\d.]+)"/g)].map(match => Number(match[1]));
+				assert.strictEqual(centers.length, count);
+				assert.ok(centers.every(center => center >= 3 && center <= expectedWidth - 3));
+				assert.strictEqual(options[0]!.range.end.character, 0);
+				const hover = (options[0]!.hoverMessage as vscode.MarkdownString).value;
+				contributors.forEach(item => assert.ok(hover.includes(item.name)));
+			} finally { manager.dispose(); }
+		});
+	}
+
+	test('twenty-run source, focus, and statistics views remain flat and preserve enabled-state rules', () => {
+		const store = new CoverageStore();
+		for (let index = 0; index < 20; index++) {
+			store.add({ ...source(), id: `run-${index}`, name: `${index}-${'long-'.repeat(10)}.json`, enabled: index < 15 });
+		}
+		const sourceView = new CoverageTreeProvider(store);
+		const focusView = new FocusSourceTreeProvider();
+		const statsView = new CurrentFileTreeProvider();
+		try {
+			focusView.update(store.getAll(), 'run-0');
+			statsView.update({ state: 'mapped', localPath: '/edit.php', coveragePath: '/review/edit.php',
+				sources: store.getAll().filter(item => item.enabled).map(item => ({ ...item, count: 1 })),
+				combined: 1, shared: 1, exclusive: 0 });
+			assert.strictEqual(sourceView.getChildren().length, 20);
+			assert.strictEqual(focusView.getChildren().length, 16);
+			assert.strictEqual(statsView.getChildren().length, 19);
+			assert.ok(statsView.getChildren().every(item => item.command === undefined));
+			assert.match(String(statsView.getChildren().at(-1)!.tooltip), /Global total/);
+		} finally { sourceView.dispose(); focusView.dispose(); statsView.dispose(); }
+	});
+	test('marker SVGs use original source-colored dots without extra outlines', () => {
 		let svg = '';
 		let applied = 0;
 		const manager = new MarkerManager(options => {
@@ -31,7 +83,7 @@ suite('Sidebar UX and accessibility', () => {
 		try {
 			manager.applyMarkers(editor, new Map([[1, [source(), { ...source(), id: '/B.json', color: 'rgba(29,78,216,0.20)' }]]]));
 			assert.strictEqual(applied, 1);
-			assert.ok(svg.includes('#ffffff') && svg.includes('#202020'));
+			assert.ok(!svg.includes('#ffffff') && !svg.includes('#202020'));
 			assert.match(svg, /rgb\(234,\s*179,\s*8\)/);
 			assert.ok(svg.includes('rgb(29,78,216)'));
 		} finally { manager.dispose(); }
@@ -50,7 +102,7 @@ suite('Sidebar UX and accessibility', () => {
 		assert.ok(svg(enabled).includes('fill="rgb(234,179,8)"') || /fill="rgb\(234,\s*179,\s*8\)"/.test(svg(enabled)));
 		assert.notStrictEqual(svg(enabled), svg(disabled));
 		for (const icon of [svg(enabled), svg(disabled)]) {
-			assert.ok(icon.includes('#ffffff') && icon.includes('#202020'));
+			assert.ok(!icon.includes('#ffffff') && !icon.includes('#202020'));
 		}
 	});
 	test('radio selections and statistics have useful accessible labels', () => {

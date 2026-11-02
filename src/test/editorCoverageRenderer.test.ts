@@ -11,7 +11,7 @@ import { LineCoverage } from '../coverage/comparisonFilter';
 import { parseCoverageFile } from '../coverage/parser';
 import { CoverageSource } from '../coverage/types';
 import { DecorationManager } from '../editor/decorationManager';
-import { MarkerManager } from '../editor/markerManager';
+import { MarkerManager, MarkerOptions } from '../editor/markerManager';
 import { EditorCoverageRenderer } from '../editor/editorCoverageRenderer';
 import { PathResolver } from '../paths/pathResolver';
 import { analyzeCurrentFile } from '../coverage/coverageAnalysis';
@@ -23,25 +23,30 @@ import { AdvancedComparison } from '../coverage/advancedComparison';
 
 class RecordingBackgrounds extends DecorationManager {
 	readonly lines = new Map<string, number[]>();
+	readonly colors = new Map<string, string>();
 	readonly clearedEditors = new Set<string>();
 	override clear(editor: vscode.TextEditor): void {
 		this.lines.clear();
+		this.colors.clear();
 		this.clearedEditors.add(editor.document.uri.toString());
 	}
 	override applySourceCoverage(
-		_editor: vscode.TextEditor, id: string, _color: string, lines: number[]
-	): void { this.lines.set(id, lines); }
+		_editor: vscode.TextEditor, id: string, color: string, lines: number[]
+	): void { this.lines.set(id, lines); this.colors.set(id, color); }
 }
 
 class RecordingMarkers extends MarkerManager {
 	coverage: LineCoverage = new Map();
+	options: MarkerOptions = {};
 	readonly clearedEditors = new Set<string>();
 	override clear(editor: vscode.TextEditor): void {
 		this.coverage = new Map();
+		this.options = {};
 		this.clearedEditors.add(editor.document.uri.toString());
 	}
-	override applyMarkers(_editor: vscode.TextEditor, coverage: LineCoverage): void {
+	override applyMarkers(_editor: vscode.TextEditor, coverage: LineCoverage, options: MarkerOptions = {}): void {
 		this.coverage = coverage;
+		this.options = options;
 	}
 }
 
@@ -59,6 +64,161 @@ async function openActiveFile(filename: string): Promise<void> {
 }
 
 suite('Editor coverage pipeline', () => {
+	for (const ids of [['A', 'B'], ['B', 'A'], ['A', 'B', 'C']]) {
+		test(`exclusive ownership colors and marker policy: ${ids.join(',')}`, async function () {
+			this.timeout(10000);
+			const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'coverage-exclusive-'));
+			const backgrounds = new RecordingBackgrounds();
+			const markers = new RecordingMarkers();
+			try {
+				const filename = path.join(directory, 'edit.php');
+				const other = path.join(directory, 'other.php');
+				await fs.writeFile(filename, 'line\n'.repeat(12));
+				await fs.writeFile(other, 'other\n');
+				await openActiveFile(filename);
+				const three = ids.length === 3;
+				const data: Record<string, number[]> = three
+					? { A: [1, 2, 10], B: [2, 3, 11], C: [3, 4, 12] }
+					: { A: [1, 2, 3], B: [3, 4, 5] };
+				const expected: Record<string, number[]> = three
+					? { A: [1, 10], B: [11], C: [4, 12] } : { A: [1, 2], B: [4, 5] };
+				const colors: Record<string, string> = { A: 'blue', B: 'yellow', C: 'green' };
+				const store = new CoverageStore();
+				for (const id of ids) {
+					store.add({ id, name: id, filePath: id, enabled: true, color: colors[id],
+						coverage: new Map([['/remote/edit.php', new Set(data[id])]]) });
+				}
+				let mode: ComparisonMode = 'exclusive';
+				let display = { ...DEFAULT_DISPLAY_OPTIONS };
+				const focus = new FocusSourceSelection(store);
+				const renderer = new EditorCoverageRenderer({ store, query: new CoverageQuery(store),
+					pathResolver: new PathResolver(), decorationManager: backgrounds, markerManager: markers,
+					getPathMapping: () => ({ coverageRoot: '/remote', localRoot: directory }),
+					getComparisonMode: () => mode, getDisplayOptions: () => display,
+					getFocusSourceId: () => focus.getSourceId() });
+				for (const backgroundHighlights of [true, false]) {
+					for (const coverageMarkers of [true, false]) {
+						display = { backgroundHighlights, coverageMarkers };
+						renderer.refreshActiveEditor();
+						assert.strictEqual(backgrounds.lines.size, backgroundHighlights ? ids.length : 0);
+						for (const id of ids) {
+							if (backgroundHighlights) {
+								assert.deepStrictEqual([...backgrounds.lines.get(id)!].sort((a, b) => a - b), expected[id]);
+								assert.strictEqual(backgrounds.colors.get(id), colors[id]);
+							}
+							for (const line of expected[id]) {
+								assert.deepStrictEqual(markers.coverage.get(line)?.map(source => source.id), coverageMarkers ? [id] : undefined);
+							}
+						}
+						assert.strictEqual(markers.coverage.has(three ? 2 : 3), false);
+						assert.strictEqual(markers.options.showSingleSourceMarkers, coverageMarkers ? true : undefined);
+					}
+				}
+				display = { ...DEFAULT_DISPLAY_OPTIONS };
+				focus.select('A');
+				renderer.refreshActiveEditor();
+				assert.deepStrictEqual([...backgrounds.lines.keys()], ['A']);
+				focus.select(undefined);
+				for (const comparison of ['combined', 'shared'] as const) {
+					mode = comparison; renderer.refreshActiveEditor();
+					assert.strictEqual(markers.options.showSingleSourceMarkers, false);
+				}
+				mode = 'exclusive';
+				store.enableOnly('A'); renderer.refreshActiveEditor();
+				assert.deepStrictEqual([...backgrounds.lines.get('A')!].sort((a, b) => a - b), data.A);
+				assert.ok([...markers.coverage.values()].every(sources => sources.length === 1 && sources[0].id === 'A'));
+				store.remove('A'); renderer.refreshActiveEditor();
+				assert.strictEqual(backgrounds.lines.size, 0);
+				assert.strictEqual(markers.coverage.size, 0);
+				store.setAllEnabled(true); renderer.refreshActiveEditor();
+				await openActiveFile(other); renderer.refreshActiveEditor();
+				assert.strictEqual(backgrounds.lines.size, 0);
+				assert.strictEqual(markers.coverage.size, 0);
+			} finally {
+				await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+				backgrounds.dispose(); markers.dispose();
+				await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+			}
+		});
+	}
+	for (const order of [['A', 'B', 'C'], ['C', 'B', 'A']]) {
+		test(`focus owns backgrounds independently of source order ${order.join(',')}`, async function () {
+			this.timeout(10000);
+			const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'coverage-focus-color-'));
+			const backgrounds = new RecordingBackgrounds();
+			const markers = new RecordingMarkers();
+			try {
+				const filename = path.join(directory, 'edit.php');
+				await fs.writeFile(filename, 'one\ntwo\nthree\nfour\nfive\n');
+				await openActiveFile(filename);
+				const store = new CoverageStore();
+				const colors: Record<string, string> = { A: 'blue', B: 'yellow', C: 'green' };
+				const lineSets: Record<string, number[]> = { A: [1, 2, 3, 5], B: [2, 3, 4, 5], C: [5] };
+				for (const id of order) {
+					store.add({ id, name: id, filePath: id, color: colors[id], enabled: true,
+						coverage: new Map([['/remote/edit.php', new Set(lineSets[id])]]) });
+				}
+				const original = store.getAll().map(source => [...source.coverage.get('/remote/edit.php')!]);
+				const focus = new FocusSourceSelection(store);
+				let mode: ComparisonMode = 'shared';
+				let display = { ...DEFAULT_DISPLAY_OPTIONS };
+				const renderer = new EditorCoverageRenderer({
+					store, query: new CoverageQuery(store), pathResolver: new PathResolver(),
+					decorationManager: backgrounds, markerManager: markers,
+					getPathMapping: () => ({ coverageRoot: '/remote', localRoot: directory }),
+					getComparisonMode: () => mode, getFocusSourceId: () => focus.getSourceId(),
+					getDisplayOptions: () => display
+				});
+				for (const id of ['A', 'B']) {
+					focus.select(id);
+					for (const comparison of ['combined', 'shared', 'exclusive'] as const) {
+						mode = comparison;
+						renderer.refreshActiveEditor();
+						const expected = comparison === 'combined' ? lineSets[id] : comparison === 'shared' ? [2, 3, 5] : [id === 'A' ? 1 : 4];
+						assert.deepStrictEqual([...backgrounds.lines].map(([source, lines]) => [source, [...lines].sort((a, b) => a - b)]), [[id, expected]]);
+						assert.deepStrictEqual([...backgrounds.colors], [[id, colors[id]]]);
+						if (comparison !== 'exclusive') {
+							assert.deepStrictEqual(markers.coverage.get(5)?.map(source => source.id).sort(), ['A', 'B', 'C']);
+						}
+					}
+				}
+				mode = 'shared';
+				focus.select('A');
+				display = { backgroundHighlights: false, coverageMarkers: true };
+				renderer.refreshActiveEditor();
+				assert.strictEqual(backgrounds.lines.size, 0);
+				assert.strictEqual(markers.coverage.size, 3);
+				display = { backgroundHighlights: true, coverageMarkers: false };
+				renderer.refreshActiveEditor();
+				assert.deepStrictEqual([...backgrounds.lines].map(([source, lines]) => [source, [...lines].sort((a, b) => a - b)]), [['A', [2, 3, 5]]]);
+				assert.strictEqual(markers.coverage.size, 0);
+				focus.select(undefined);
+				renderer.refreshActiveEditor();
+				assert.deepStrictEqual([...backgrounds.lines.keys()].sort(), ['A', 'B', 'C']);
+				assert.deepStrictEqual(store.getAll().map(source => [...source.coverage.get('/remote/edit.php')!]), original);
+				focus.select('A');
+				store.toggle('A');
+				renderer.refreshActiveEditor();
+				assert.strictEqual(focus.getSourceId(), undefined);
+				assert.strictEqual(backgrounds.lines.has('A'), false);
+				store.toggle('A');
+				focus.select('A');
+				store.get('A')!.coverage.clear();
+				renderer.refreshActiveEditor();
+				assert.strictEqual(backgrounds.lines.size, 0);
+				store.remove('A');
+				renderer.refreshActiveEditor();
+				assert.strictEqual(focus.getSourceId(), undefined);
+				store.setAllEnabled(false);
+				renderer.refreshActiveEditor();
+				assert.strictEqual(backgrounds.lines.size, 0);
+			} finally {
+				await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+				backgrounds.dispose(); markers.dispose();
+				await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+			}
+		});
+	}
 	test('virtual documents sharing a mapped fsPath do not receive coverage or stale statistics', async function () {
 		this.timeout(10000);
 		const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'coverage-virtual-'));
@@ -223,7 +383,7 @@ suite('Editor coverage pipeline', () => {
 							const expectedMarkers = coverageMarkers ? visible : new Map();
 							assert.deepStrictEqual(markers.coverage, expectedMarkers);
 							for (const source of store.getAll()) {
-								const expected = backgroundHighlights
+								const expected = backgroundHighlights && (focusId === undefined || focusId === source.id)
 									? [...visible].filter(([, sources]) => sources.some(item => item.id === source.id)).map(([line]) => line)
 									: [];
 								assert.deepStrictEqual(backgrounds.lines.get(source.id) ?? [], expected);
@@ -251,7 +411,7 @@ suite('Editor coverage pipeline', () => {
 			assert.strictEqual(backgrounds.lines.has('A'), false);
 			mode = 'shared';
 			renderer.refreshActiveEditor();
-			assert.deepStrictEqual(backgrounds.lines.get('A'), [2, 3, 5]);
+			assert.strictEqual(backgrounds.lines.has('A'), false);
 			assert.deepStrictEqual(backgrounds.lines.get('B'), [2, 3, 5]);
 			assert.deepStrictEqual(markers.coverage.get(2)?.map(source => source.id), ['A', 'B']);
 			await openActiveFile(path.join(directory, 'birthdays.php'));

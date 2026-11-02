@@ -18,6 +18,7 @@ export class AdvancedComparisonTreeProvider implements vscode.TreeDataProvider<v
 		if (parent) { return []; }
 		const selection = this.selection;
 		const rows = [this.row('standard', 'Comparison / Focus', selection.kind === 'standard', 'useStandardComparison')];
+		rows[0]!.tooltip = 'Use the Comparison and Focus Source selections; turn off advanced filtering.';
 		if (selection.kind === 'pairwise') {
 			for (const side of ['sourceA', 'sourceB'] as const) {
 				const source = this.sources.find(item => item.id === selection[side]);
