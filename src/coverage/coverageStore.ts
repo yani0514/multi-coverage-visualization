@@ -52,4 +52,14 @@ export class CoverageStore {
 			source.enabled = enabled;
 		}
 	}
+
+	/** Ignore stale IDs rather than accidentally disabling every source. */
+	enableOnly(id: string): void {
+		if (!this.sources.has(id)) {
+			return;
+		}
+		for (const source of this.sources.values()) {
+			source.enabled = source.id === id;
+		}
+	}
 }

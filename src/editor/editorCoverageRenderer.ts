@@ -8,6 +8,7 @@ import {
 import { CoverageQuery } from '../coverage/coverageQuery';
 import { CoverageStore } from '../coverage/coverageStore';
 import { CoverageSource } from '../coverage/types';
+import { CurrentFileCoverage } from '../coverage/coverageAnalysis';
 
 import { PathMapping } from '../paths/pathMapping';
 import { PathResolver } from '../paths/pathResolver';
@@ -26,6 +27,7 @@ export interface EditorCoverageRendererOptions {
 		| undefined;
 	readonly getComparisonMode: () =>
 		ComparisonMode;
+	readonly getFocusSourceId?: () => string | undefined;
 }
 
 export class EditorCoverageRenderer {
@@ -33,12 +35,12 @@ export class EditorCoverageRenderer {
 		private readonly options: EditorCoverageRendererOptions
 	) {}
 
-	refreshActiveEditor(): void {
+	refreshActiveEditor(): CurrentFileCoverage {
 		const editor =
 			vscode.window.activeTextEditor;
 
 		if (!editor) {
-			return;
+			return { state: 'no-editor' };
 		}
 
 		/*
@@ -50,13 +52,11 @@ export class EditorCoverageRenderer {
 
 		const pathMapping =
 			this.options.getPathMapping();
+		const localPath = editor.document.uri.fsPath;
 
 		if (!pathMapping) {
-			return;
+			return { state: 'unmapped', localPath };
 		}
-
-		const localPath =
-			editor.document.uri.fsPath;
 
 		const matchedCoveragePath =
 			this.options.pathResolver.resolveCoveragePath(
@@ -66,7 +66,7 @@ export class EditorCoverageRenderer {
 			);
 
 		if (!matchedCoveragePath) {
-			return;
+			return { state: 'unmapped', localPath };
 		}
 
 		const fileCoverage =
@@ -77,7 +77,8 @@ export class EditorCoverageRenderer {
 		const visibleCoverage =
 			buildVisibleCoverage(
 				fileCoverage,
-				this.options.getComparisonMode()
+				this.options.getComparisonMode(),
+				this.options.getFocusSourceId?.()
 			);
 
 		this.applyBackgroundHighlights(
@@ -89,6 +90,10 @@ export class EditorCoverageRenderer {
 			editor,
 			visibleCoverage
 		);
+		return {
+			state: 'mapped', localPath, coveragePath: matchedCoveragePath,
+			coverage: fileCoverage, sources: this.options.store.getAll()
+		};
 	}
 
 	private clearEditor(

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 
 import {
 	ComparisonMode,
-	COMPARISON_MODES,
+	getComparisonModes,
 	DEFAULT_COMPARISON_MODE
 } from '../coverage/comparisonMode';
 
@@ -15,6 +15,7 @@ export class ComparisonTreeProvider
 
 	private currentMode: ComparisonMode =
 		DEFAULT_COMPARISON_MODE;
+	private focusSourceId: string | undefined;
 
 	constructor(initialMode: ComparisonMode = DEFAULT_COMPARISON_MODE) {
 		this.currentMode = initialMode;
@@ -35,18 +36,26 @@ export class ComparisonTreeProvider
 	}
 
 	getChildren(): ComparisonTreeItem[] {
-		return COMPARISON_MODES.map(
+		return getComparisonModes(this.focusSourceId !== undefined).map(
 			info =>
 				new ComparisonTreeItem(
 					info.mode,
 					info.mode ===
-						this.currentMode
+						this.currentMode,
+					this.focusSourceId !== undefined
 				)
 		);
 	}
 
 	getMode(): ComparisonMode {
 		return this.currentMode;
+	}
+
+	setFocusSource(sourceId: string | undefined): void {
+		if (this.focusSourceId !== sourceId) {
+			this.focusSourceId = sourceId;
+			this.refresh();
+		}
 	}
 
 	setMode(mode: ComparisonMode): void {

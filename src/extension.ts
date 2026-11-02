@@ -22,6 +22,10 @@ import { EditorCoverageRenderer } from './editor/editorCoverageRenderer';
 import { CoverageTreeProvider } from './sidebar/coverageTreeProvider';
 import { CoverageTreeItem } from './sidebar/coverageTreeItem';
 import { ComparisonTreeProvider } from './sidebar/comparisonTreeProvider';
+import { CurrentFileTreeProvider } from './sidebar/currentFileTreeProvider';
+import { analyzeCurrentFile } from './coverage/coverageAnalysis';
+import { FocusSourceSelection } from './coverage/focusSourceSelection';
+import { FocusSourceTreeProvider } from './sidebar/focusSourceTreeProvider';
 
 export function activate(
 	context: vscode.ExtensionContext
@@ -31,6 +35,7 @@ export function activate(
 	);
 
 	const store = new CoverageStore();
+	const focusSelection = new FocusSourceSelection(store);
 	const workspaceConfig = new WorkspaceConfig(context.workspaceState);
 	const query = new CoverageQuery(store);
 
@@ -45,6 +50,8 @@ export function activate(
 
 	const comparisonTreeProvider =
 		new ComparisonTreeProvider(workspaceConfig.getComparisonMode());
+	const currentFileTreeProvider = new CurrentFileTreeProvider();
+	const focusSourceTreeProvider = new FocusSourceTreeProvider();
 
 	let pathMapping = workspaceConfig.getPathMapping();
 
@@ -58,7 +65,8 @@ export function activate(
 			getPathMapping: () =>
 				pathMapping,
 			getComparisonMode: () =>
-				comparisonTreeProvider.getMode()
+				comparisonTreeProvider.getMode(),
+			getFocusSourceId: () => focusSelection.getSourceId()
 		});
 
 	const coverageTreeView =
@@ -86,6 +94,12 @@ export function activate(
 			store.size > 0
 		);
 	};
+	const currentFileTreeView = vscode.window.createTreeView('multiCoverage.currentFile', {
+		treeDataProvider: currentFileTreeProvider
+	});
+	const focusSourceTreeView = vscode.window.createTreeView('multiCoverage.focusSource', {
+		treeDataProvider: focusSourceTreeProvider
+	});
 
 	const refreshSources = () => {
 		coverageTreeProvider.refresh();
@@ -93,7 +107,11 @@ export function activate(
 	};
 
 	const refreshVisualization = () => {
-		renderer.refreshActiveEditor();
+		const focusId = focusSelection.getSourceId();
+		focusSourceTreeProvider.update(store.getAll(), focusId);
+		comparisonTreeProvider.setFocusSource(focusId);
+		const snapshot = renderer.refreshActiveEditor();
+		currentFileTreeProvider.update(analyzeCurrentFile(snapshot));
 	};
 
 	const refreshSourcesAndVisualization =
@@ -203,7 +221,7 @@ export function activate(
 
 					store.add(source);
 
-					refreshSources();
+					refreshSourcesAndVisualization();
 
 					vscode.window.showInformationMessage(
 						`Loaded ${source.name}. ` +
@@ -321,6 +339,25 @@ export function activate(
 			}
 		);
 
+	const setFocusSourceCommand = vscode.commands.registerCommand(
+		'multi-coverage-visualization.setFocusSource',
+		(sourceId: unknown) => {
+			if (sourceId === null) { sourceId = undefined; }
+			if (sourceId !== undefined && typeof sourceId !== 'string') { return; }
+			focusSelection.select(sourceId);
+			refreshVisualization();
+		}
+	);
+	const showOnlySourceCommand = vscode.commands.registerCommand(
+		'multi-coverage-visualization.showOnlyCoverageSource',
+		(item: CoverageTreeItem | string) => {
+			const sourceId = typeof item === 'string' ? item : item?.source.id;
+			if (typeof sourceId !== 'string') { return; }
+			store.enableOnly(sourceId);
+			refreshSourcesAndVisualization();
+		}
+	);
+
 	/*
 	 * Automatically refresh coverage when
 	 * the user switches editor tabs/files.
@@ -340,9 +377,15 @@ export function activate(
 		disableAllCoverageSourcesCommand,
 		removeCoverageSourceCommand,
 		setComparisonModeCommand,
+		setFocusSourceCommand,
+		showOnlySourceCommand,
 		editorChangeListener,
 		coverageTreeView,
 		comparisonTreeView,
+		currentFileTreeView,
+		currentFileTreeProvider,
+		focusSourceTreeView,
+		focusSourceTreeProvider,
 		coverageTreeProvider,
 		comparisonTreeProvider,
 		{

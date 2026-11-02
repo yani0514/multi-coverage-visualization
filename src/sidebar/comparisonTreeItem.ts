@@ -8,10 +8,11 @@ import {
 export class ComparisonTreeItem extends vscode.TreeItem {
 	constructor(
 		public readonly mode: ComparisonMode,
-		selected: boolean
+		selected: boolean,
+		focused = false
 	) {
 		const info =
-			getComparisonModeInfo(mode);
+			getComparisonModeInfo(mode, focused);
 
 		super(
 			info.label,

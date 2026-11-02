@@ -50,6 +50,27 @@ Coverage line `0` is ignored, and coverage line numbers are converted from
   source to remove it.
 - **Comparison** selects which lines are visible. The selected mode applies to
   both background highlights and overlap markers.
+- **Focus Source** selects one enabled run or **None**. With a focus, Comparison
+  offers **Covered by Focus**, **Exclusive to Focus**, and **Shared with Focus**.
+  These show that run's lines, its lines covered by no other enabled run, or its
+  lines also covered by at least one other enabled run. Choosing None restores
+  global comparison. The comparison intent is retained when focus changes:
+  Combined becomes Covered by Focus, Shared becomes Shared with Focus, and
+  Exclusive becomes Exclusive to Focus. Disabling or removing the focused run
+  resets focus to None; enabling it again does not restore focus automatically.
+- **Current File** shows the mapped file, a covered-line count for every enabled
+  source, and Combined (at least one source), Shared (at least two), and Exclusive
+  (exactly one) totals. A run without that file shows `0 lines`. Counts exclude
+  line `0` and include positive coverage lines beyond the editor's length, so
+  totals describe the loaded data. All three totals remain visible regardless
+  of the selected Comparison mode. Switching files, changing mapping, or changing
+  sources updates the view automatically; unmapped files clear the old statistics.
+  These global totals are unchanged by focus selection.
+
+Right-click a Coverage Sources row and select **Show Only This Source** to enable
+that run and disable every other run. This does not select a focus. An existing
+focus remains only if its run is still enabled. Enable All and Disable All remain
+available in the Coverage Sources **...** menu.
 
 ## Commands
 
@@ -62,6 +83,7 @@ Coverage line `0` is ignored, and coverage line numbers are converted from
 | `Multi Coverage: Remove Coverage Source` | Unload a source |
 | `Multi Coverage: Set Comparison Mode` | Switch comparison mode |
 | `Multi Coverage: Configure Path Mapping` | Replace the workspace's coverage and local roots |
+| `Show Only This Source` | Source context action: enable this run and disable the others |
 
 ## Workspace configuration
 
@@ -76,6 +98,8 @@ prefilled, cancelling preserves them, and a completed change refreshes the edito
 immediately. If saving fails, a warning explains that the change is session-only.
 
 Loaded JSON paths, coverage data, and source enabled states are not persisted.
+Focus Source is also session-only and starts at None; only the base comparison
+intent is saved, so no unloaded source ID is restored after a restart.
 This keeps reloads explicit so old coverage runs and unavailable network files
 are not automatically opened on startup. Sources start enabled when loaded in a
 new session; reloading an existing source within a session retains its state.
@@ -87,7 +111,7 @@ The native sidebar has independent source and comparison tree providers.
 `EditorCoverageRenderer` resolves the current file, queries raw coverage, removes
 disabled sources, and applies `comparisonFilter` before passing the same derived
 coverage to both decoration managers. Filtering never changes the stored maps.
-Additional Focus Source, Current File, and Display views can use separate providers
+Additional Display views can use separate providers
 without changing parsing or mixing display options with comparison rules.
 
 ```bash
@@ -117,7 +141,6 @@ Press `F5` in VS Code to launch the extension development host.
 ## Current limitations
 
 - Loaded coverage sources and their enabled states are session-scoped.
-- Focus Source, Current File statistics, and Display toggles are planned but not
-  implemented yet.
+- Display toggles are planned but not implemented yet.
 - Coverage is read from the aggregated JSON format where each file path maps to
   an object of covered line numbers.

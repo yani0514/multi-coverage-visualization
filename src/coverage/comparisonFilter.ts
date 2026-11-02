@@ -44,7 +44,8 @@ export function filterEnabledSources(
  */
 export function applyComparisonMode(
 	fileCoverage: LineCoverage,
-	mode: ComparisonMode
+	mode: ComparisonMode,
+	focusSourceId?: string
 ): LineCoverage {
 	const filteredCoverage: LineCoverage =
 		new Map();
@@ -53,6 +54,9 @@ export function applyComparisonMode(
 		const [line, sources]
 		of fileCoverage
 	) {
+		if (focusSourceId !== undefined && !sources.some(source => source.id === focusSourceId)) {
+			continue;
+		}
 		if (
 			isLineVisible(
 				sources.length,
@@ -96,10 +100,12 @@ export function isLineVisible(
  */
 export function buildVisibleCoverage(
 	fileCoverage: LineCoverage,
-	mode: ComparisonMode
+	mode: ComparisonMode,
+	focusSourceId?: string
 ): LineCoverage {
 	return applyComparisonMode(
 		filterEnabledSources(fileCoverage),
-		mode
+		mode,
+		focusSourceId
 	);
 }
