@@ -19,6 +19,7 @@ import { CurrentFileTreeProvider } from '../sidebar/currentFileTreeProvider';
 import { FocusSourceSelection } from '../coverage/focusSourceSelection';
 import { DisplayOptions, DEFAULT_DISPLAY_OPTIONS } from '../editor/displayOptions';
 import { buildVisibleCoverage } from '../coverage/comparisonFilter';
+import { AdvancedComparison } from '../coverage/advancedComparison';
 
 class RecordingBackgrounds extends DecorationManager {
 	readonly lines = new Map<string, number[]>();
@@ -83,6 +84,7 @@ suite('Editor coverage pipeline', () => {
 			let mode: ComparisonMode = 'shared';
 			let display: DisplayOptions = { ...DEFAULT_DISPLAY_OPTIONS };
 			const focus = new FocusSourceSelection(store);
+			const advanced = new AdvancedComparison(store);
 			let mapping = { coverageRoot: '/remote', localRoot: directory };
 			const renderer = new EditorCoverageRenderer({
 				store, query: new CoverageQuery(store), pathResolver: new PathResolver(),
@@ -90,7 +92,8 @@ suite('Editor coverage pipeline', () => {
 				getPathMapping: () => mapping,
 				getComparisonMode: () => mode,
 				getFocusSourceId: () => focus.getSourceId(),
-				getDisplayOptions: () => display
+				getDisplayOptions: () => display,
+				getAdvancedSelection: () => advanced.getSelection()
 			});
 			for (const [filename, expected] of [
 				['edit.php', [2, 3, 5]], ['birthdays.php', [2]], ['helper.inc', [3]]
@@ -113,6 +116,45 @@ suite('Editor coverage pipeline', () => {
 				assert.deepStrictEqual(backgrounds.lines.get('B'), [...expected]);
 			}
 			await openActiveFile(path.join(directory, 'edit.php'));
+			focus.select('A');
+			mode = 'exclusive';
+			advanced.setPairwise('A', 'B', 'both');
+			let advancedStats = analyzeCurrentFile(renderer.refreshActiveEditor());
+			assert.deepStrictEqual(backgrounds.lines.get('A'), [2, 3, 5]);
+			assert.deepStrictEqual(backgrounds.lines.get('B'), [2, 3, 5]);
+			assert.deepStrictEqual(markers.coverage.get(2)?.map(source => source.id), ['A', 'B']);
+			if (advancedStats.state !== 'mapped') { assert.fail('Expected mapped statistics'); }
+			assert.deepStrictEqual([advancedStats.combined, advancedStats.shared, advancedStats.exclusive], [5, 3, 2]);
+			advanced.setPairwiseOperation('only-b');
+			renderer.refreshActiveEditor();
+			assert.deepStrictEqual(backgrounds.lines.get('B'), [4]);
+			assert.strictEqual(backgrounds.lines.has('A'), false);
+			await openActiveFile(path.join(directory, 'birthdays.php'));
+			renderer.refreshActiveEditor();
+			assert.strictEqual(backgrounds.lines.size, 0);
+			advanced.setPairwiseOperation('both');
+			renderer.refreshActiveEditor();
+			assert.deepStrictEqual([...markers.coverage.keys()], [2]);
+			mapping = { ...mapping, coverageRoot: '/wrong' };
+			assert.strictEqual(renderer.refreshActiveEditor().state, 'unmapped');
+			assert.strictEqual(backgrounds.lines.size, 0);
+			assert.strictEqual(markers.coverage.size, 0);
+			mapping = { ...mapping, coverageRoot: '/remote' };
+			await openActiveFile(path.join(directory, 'edit.php'));
+			advanced.setMultiplicity('at-least', 2);
+			renderer.refreshActiveEditor();
+			assert.deepStrictEqual([...markers.coverage.keys()], [2, 3, 5]);
+			display = { backgroundHighlights: false, coverageMarkers: false };
+			advancedStats = analyzeCurrentFile(renderer.refreshActiveEditor());
+			assert.strictEqual(backgrounds.lines.size, 0);
+			assert.strictEqual(markers.coverage.size, 0);
+			if (advancedStats.state !== 'mapped') { assert.fail('Expected mapped statistics'); }
+			assert.strictEqual(advancedStats.combined, 5);
+			store.toggle('B');
+			renderer.refreshActiveEditor();
+			assert.strictEqual(advanced.getSelection().kind, 'standard');
+			store.toggle('B');
+			advanced.reset();
 			// Every display combination must preserve selection and global statistics.
 			for (const backgroundHighlights of [true, false]) {
 				for (const coverageMarkers of [true, false]) {

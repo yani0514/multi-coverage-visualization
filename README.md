@@ -71,6 +71,38 @@ Coverage line `0` is ignored, and coverage line numbers are converted from
   coverage decorations while keeping loaded data, focus, comparison, and Current
   File counts intact. Markers still represent multi-source lines only; disabling
   backgrounds does not create markers for lines covered by just one source.
+- **Advanced Comparison** (initially collapsed) offers pairwise analysis and a
+  command-driven N-of-M filter. **Comparison / Focus** returns to standard analysis.
+
+### Advanced comparison
+
+Choose **Pairwise Comparison** in the Advanced Comparison view (or run **Multi
+Coverage: Configure Pairwise Comparison**). Pick two distinct enabled runs for
+Source A and Source B. Click either source row to change it, then select:
+
+| Operation | Visible coverage |
+| --- | --- |
+| Both | A ∩ B |
+| Only A | A \\ B |
+| Only B | B \\ A |
+| A or B | A ∪ B |
+
+Other enabled runs do not affect pairwise filtering, colors, markers, or hovers.
+Fewer than two enabled runs makes pairwise configuration unavailable. Disabling
+or removing either selected run clears the pair and returns to standard analysis.
+Missing coverage for a file in one run is treated as an empty set for that file.
+
+Choose **N-of-M Filter** (or **Multi Coverage: Configure N-of-M Filter**) to select
+**at least N** or **exactly N**, then enter N between 1 and the number of enabled
+runs. This counts all enabled runs, including runs with no coverage for the current
+file. If fewer than N remain enabled, the filter resets to standard analysis.
+
+Advanced analysis replaces, rather than stacks with, standard comparison/focus
+filtering. Focus and comparison selections are retained. Select **Comparison /
+Focus**, a regular Comparison mode, or a Focus Source to return to standard
+analysis. Current File always shows global statistics, and Display controls still
+apply. Cancelling a picker leaves the current analysis unchanged. Pair selections
+and N-of-M rules are session-only, like the loaded coverage sources.
 
 Right-click a Coverage Sources row and select **Show Only This Source** to enable
 that run and disable every other run. This does not select a focus. An existing

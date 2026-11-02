@@ -16,6 +16,7 @@ import { PathResolver } from '../paths/pathResolver';
 import { DecorationManager } from './decorationManager';
 import { MarkerManager } from './markerManager';
 import { DisplayOptions, DEFAULT_DISPLAY_OPTIONS } from './displayOptions';
+import { AdvancedSelection } from '../coverage/advancedComparison';
 
 export interface EditorCoverageRendererOptions {
 	readonly store: CoverageStore;
@@ -30,6 +31,7 @@ export interface EditorCoverageRendererOptions {
 		ComparisonMode;
 	readonly getFocusSourceId?: () => string | undefined;
 	readonly getDisplayOptions?: () => DisplayOptions;
+	readonly getAdvancedSelection?: () => AdvancedSelection;
 }
 
 export class EditorCoverageRenderer {
@@ -90,7 +92,8 @@ export class EditorCoverageRenderer {
 			buildVisibleCoverage(
 				fileCoverage,
 				this.options.getComparisonMode(),
-				this.options.getFocusSourceId?.()
+				this.options.getFocusSourceId?.(),
+				this.options.getAdvancedSelection?.()
 			);
 
 		const display = this.options.getDisplayOptions?.() ?? DEFAULT_DISPLAY_OPTIONS;

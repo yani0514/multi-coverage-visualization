@@ -13,6 +13,11 @@
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
+      { "command": "multi-coverage-visualization.configurePairwise", "title": "Multi Coverage: Configure Pairwise Comparison" },
+      { "command": "multi-coverage-visualization.configureMultiplicity", "title": "Multi Coverage: Configure N-of-M Filter" },
+      { "command": "multi-coverage-visualization.useStandardComparison", "title": "Multi Coverage: Use Comparison / Focus" },
+      { "command": "multi-coverage-visualization.selectPairwiseSource", "title": "Multi Coverage: Select Pairwise Source" },
+      { "command": "multi-coverage-visualization.setPairwiseOperation", "title": "Multi Coverage: Set Pairwise Operation" },
       {
         "command": "multi-coverage-visualization.toggleDisplayOption",
         "title": "Multi Coverage: Toggle Display Option"
@@ -94,6 +99,12 @@
           "id": "multiCoverage.display",
           "name": "Display",
           "icon": "resources/icon.svg"
+        },
+        {
+          "id": "multiCoverage.advancedComparison",
+          "name": "Advanced Comparison",
+          "icon": "resources/icon.svg",
+          "visibility": "collapsed"
         }
       ]
     },
@@ -105,6 +116,8 @@
     ],
     "menus": {
       "commandPalette": [
+        { "command": "multi-coverage-visualization.selectPairwiseSource", "when": "false" },
+        { "command": "multi-coverage-visualization.setPairwiseOperation", "when": "false" },
         {
           "command": "multi-coverage-visualization.toggleDisplayOption",
           "when": "false"

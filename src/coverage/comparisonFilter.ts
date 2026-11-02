@@ -1,5 +1,6 @@
 import { ComparisonMode } from './comparisonMode';
 import { CoverageSource } from './types';
+import { AdvancedSelection } from './advancedComparison';
 
 /**
  * Coverage for a single source file, keyed by 1-based line number.
@@ -101,11 +102,29 @@ export function isLineVisible(
 export function buildVisibleCoverage(
 	fileCoverage: LineCoverage,
 	mode: ComparisonMode,
-	focusSourceId?: string
+	focusSourceId?: string,
+	analysis: AdvancedSelection = { kind: 'standard' }
 ): LineCoverage {
-	return applyComparisonMode(
-		filterEnabledSources(fileCoverage),
-		mode,
-		focusSourceId
-	);
+	const enabled = filterEnabledSources(fileCoverage);
+	if (analysis.kind === 'standard') {
+		return applyComparisonMode(enabled, mode, focusSourceId);
+	}
+	const visible: LineCoverage = new Map();
+	for (const [line, sources] of enabled) {
+		if (analysis.kind === 'multiplicity') {
+			if (analysis.rule === 'at-least' ? sources.length >= analysis.count : sources.length === analysis.count) {
+				visible.set(line, sources);
+			}
+		} else {
+			// Pairwise rendering shows only the chosen pair, even if other runs cover the line.
+			const pair = sources.filter(source => source.id === analysis.sourceA || source.id === analysis.sourceB);
+			const hasA = pair.some(source => source.id === analysis.sourceA);
+			const hasB = pair.some(source => source.id === analysis.sourceB);
+			const matches = analysis.operation === 'both' ? hasA && hasB
+				: analysis.operation === 'only-a' ? hasA && !hasB
+					: analysis.operation === 'only-b' ? hasB && !hasA : hasA || hasB;
+			if (matches) { visible.set(line, pair); }
+		}
+	}
+	return visible;
 }

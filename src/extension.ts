@@ -28,6 +28,9 @@ import { FocusSourceSelection } from './coverage/focusSourceSelection';
 import { FocusSourceTreeProvider } from './sidebar/focusSourceTreeProvider';
 import { DisplayTreeProvider } from './sidebar/displayTreeProvider';
 import { DisplayOptionKey, isDisplayOptionKey } from './editor/displayOptions';
+import { AdvancedComparison } from './coverage/advancedComparison';
+import { AdvancedComparisonTreeProvider } from './sidebar/advancedComparisonTreeProvider';
+import { registerAdvancedComparisonCommands } from './sidebar/advancedComparisonCommands';
 
 export function activate(
 	context: vscode.ExtensionContext
@@ -37,6 +40,7 @@ export function activate(
 	);
 
 	const store = new CoverageStore();
+	const advancedComparison = new AdvancedComparison(store);
 	const focusSelection = new FocusSourceSelection(store);
 	const workspaceConfig = new WorkspaceConfig(context.workspaceState);
 	const query = new CoverageQuery(store);
@@ -55,6 +59,7 @@ export function activate(
 	const currentFileTreeProvider = new CurrentFileTreeProvider();
 	const focusSourceTreeProvider = new FocusSourceTreeProvider();
 	const displayTreeProvider = new DisplayTreeProvider(workspaceConfig.getDisplayOptions());
+	const advancedTreeProvider = new AdvancedComparisonTreeProvider();
 
 	let pathMapping = workspaceConfig.getPathMapping();
 
@@ -70,7 +75,8 @@ export function activate(
 			getComparisonMode: () =>
 				comparisonTreeProvider.getMode(),
 			getFocusSourceId: () => focusSelection.getSourceId(),
-			getDisplayOptions: () => displayTreeProvider.getOptions()
+			getDisplayOptions: () => displayTreeProvider.getOptions(),
+			getAdvancedSelection: () => advancedComparison.getSelection()
 		});
 
 	const coverageTreeView =
@@ -108,13 +114,19 @@ export function activate(
 		treeDataProvider: displayTreeProvider,
 		manageCheckboxStateManually: true
 	});
+	const advancedTreeView = vscode.window.createTreeView('multiCoverage.advancedComparison', {
+		treeDataProvider: advancedTreeProvider
+	});
 
 	const refreshSources = () => {
 		coverageTreeProvider.refresh();
 		updateSourceContext();
 	};
 
-	const refreshVisualization = (allVisible = false) => {
+	const refreshVisualization = (allVisible = true) => {
+		const advanced = advancedComparison.getSelection();
+		advancedTreeProvider.update(advanced, store.getAll());
+		comparisonTreeView.message = advanced.kind === 'standard' ? undefined : 'Advanced Comparison is active. Select a mode here to return.';
 		const focusId = focusSelection.getSourceId();
 		focusSourceTreeProvider.update(store.getAll(), focusId);
 		comparisonTreeProvider.setFocusSource(focusId);
@@ -129,6 +141,7 @@ export function activate(
 		};
 
 	updateSourceContext();
+	const advancedCommands = registerAdvancedComparisonCommands(store, advancedComparison, () => refreshVisualization(true));
 
 	// Apply changes immediately; a storage failure must not disable this session.
 	const persistConfiguration = async (save: () => Promise<void>) => {
@@ -337,6 +350,7 @@ export function activate(
 				if (!isComparisonMode(mode)) {
 					return;
 				}
+				advancedComparison.reset();
 
 				comparisonTreeProvider.setMode(
 					mode
@@ -352,6 +366,7 @@ export function activate(
 		(sourceId: unknown) => {
 			if (sourceId === null) { sourceId = undefined; }
 			if (sourceId !== undefined && typeof sourceId !== 'string') { return; }
+			advancedComparison.reset();
 			focusSelection.select(sourceId);
 			refreshVisualization();
 		}
@@ -400,6 +415,9 @@ export function activate(
 	});
 
 	context.subscriptions.push(
+		...advancedCommands,
+		advancedTreeView,
+		advancedTreeProvider,
 		configureMappingCommand,
 		loadCoverageCommand,
 		toggleCoverageSourceCommand,
