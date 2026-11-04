@@ -1,4 +1,11 @@
 .vscode/**
+.git/**
+.github/**
+test/**
+coverage/**
+**/*.log
+**/*.vsix
+package-lock.json
 .vscode-test/**
 out/**
 node_modules/**

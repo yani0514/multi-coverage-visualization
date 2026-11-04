@@ -28,6 +28,23 @@ and the multi-source markers.
 
 ## Getting started
 
+### Install from VSIX
+
+Requires VS Code 1.140.0 or newer. Open **Extensions**, select **... → Install
+from VSIX...**, and choose `multi-coverage-visualization-0.0.1.vsix`.
+Alternatively, run:
+
+```sh
+code --install-extension multi-coverage-visualization-0.0.1.vsix
+```
+
+For a local build, run `npm ci`, then
+`npx @vscode/vsce package --allow-missing-repository --skip-license`.
+This project has no configured Marketplace publisher and is distributed locally.
+`UNLICENSED` does not grant an open-source license.
+
+### Load coverage
+
 1. Open the **Multi Coverage** view in the Activity Bar.
 2. Use **Load Coverage File** in the **Coverage Sources** view title.
 3. When prompted, enter the root path used inside the coverage JSON and select
